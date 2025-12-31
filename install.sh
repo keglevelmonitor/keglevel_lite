@@ -1,15 +1,12 @@
 #!/bin/bash
 # install.sh
-# Installation script for KegLevel Monitor application.
-
-# might need to do this for new installs, check kettlebrain install:
-# sudo apt-get install libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev pip install kivy
+# Installation script for KegLevel Lite application.
 
 # Stop on any error to prevent broken installs
 set -e
 
 echo "=========================================="
-echo "   KegLevel Monitor Installer"
+echo "   KegLevel Lite Installer"
 echo "=========================================="
 
 # --- 1. Define Variables ---
@@ -19,12 +16,11 @@ VENV_DIR="$PROJECT_DIR/venv"
 VENV_PYTHON_EXEC="$VENV_DIR/bin/python"
 
 # Desktop Entry Paths
-DESKTOP_FILE_TEMPLATE="$PROJECT_DIR/keglevel.desktop"
-# Note: We force lowercase here to match the Python code
-INSTALL_LOCATION="$HOME/.local/share/applications/keglevel.desktop"
-DATA_DIR="$HOME/keglevel-data"
+DESKTOP_FILE_TEMPLATE="$PROJECT_DIR/keglevel_lite.desktop"
+INSTALL_LOCATION="$HOME/.local/share/applications/keglevel_lite.desktop"
+DATA_DIR="$HOME/keglevel_lite-data"
 # Temp file for modification
-TEMP_DESKTOP_FILE="/tmp/keglevel_temp.desktop"
+TEMP_DESKTOP_FILE="/tmp/keglevel_lite_temp.desktop"
 
 echo "Project path: $PROJECT_DIR"
 
@@ -33,9 +29,9 @@ echo ""
 echo "--- [Step 1/5] Checking System Dependencies ---"
 echo "You may be asked for your password to install system packages."
 
-# Install Tkinter, Build Tools (swig/dev), GPIO C-Library (liblgpio-dev), AND numlockx
+# Install Kivy Dependencies (SDL2), Build Tools, and GPIO
 sudo apt-get update
-sudo apt-get install -y python3-tk python3-dev swig python3-venv liblgpio-dev numlockx
+sudo apt-get install -y python3-dev python3-venv liblgpio-dev numlockx libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev
 
 # --- 3. Setup Python Environment (Clean Install) ---
 echo ""
@@ -68,7 +64,6 @@ if [ -f "$PROJECT_DIR/requirements.txt" ]; then
     "$VENV_PYTHON_EXEC" -m pip install -r "$PROJECT_DIR/requirements.txt"
 else
     echo "WARNING: requirements.txt not found. Installing default shim (rpi-lgpio)..."
-    # Fallback for KegLevel if requirements file is missing
     "$VENV_PYTHON_EXEC" -m pip install rpi-lgpio
 fi
 
@@ -93,15 +88,17 @@ echo ""
 echo "--- [Step 5/5] Installing Desktop Shortcut ---"
 
 if [ -f "$DESKTOP_FILE_TEMPLATE" ]; then
-    # 6a. Prepare paths
-    # EXEC_CMD points to the VENV python to ensure libraries are found
-    EXEC_CMD="$VENV_PYTHON_EXEC $PROJECT_DIR/src/main.py"
+    # 6a. Prepare paths (For dynamic replacement if needed)
+    EXEC_CMD="$VENV_PYTHON_EXEC $PROJECT_DIR/src/main_kivy.py"
     ICON_PATH="$PROJECT_DIR/src/assets/beer-keg.png"
     
     # 6b. Create the modified file in /tmp
     cp "$DESKTOP_FILE_TEMPLATE" "$TEMP_DESKTOP_FILE"
     
     # 6c. Inject correct paths
+    # Note: Since your file has hardcoded paths, these sed commands 
+    # will likely find nothing to replace, which is fine. It ensures
+    # the script works even if you switch to dynamic placeholders later.
     sed -i "s|Exec=PLACEHOLDER_EXEC_PATH|Exec=$EXEC_CMD|g" "$TEMP_DESKTOP_FILE"
     sed -i "s|Path=PLACEHOLDER_PATH|Path=$PROJECT_DIR/src|g" "$TEMP_DESKTOP_FILE"
     sed -i "s|Icon=PLACEHOLDER_ICON_PATH|Icon=$ICON_PATH|g" "$TEMP_DESKTOP_FILE"
@@ -112,11 +109,8 @@ if [ -f "$DESKTOP_FILE_TEMPLATE" ]; then
     chmod +x "$INSTALL_LOCATION"
     echo "Shortcut installed to Application Menu: $INSTALL_LOCATION"
 
-    # NOTE: We no longer copy to Desktop.
-    # The Python app will look for $INSTALL_LOCATION when toggling autostart.
-
 else
-    echo "[WARNING] keglevel.desktop template not found. Skipping shortcut."
+    echo "[WARNING] keglevel_lite.desktop template not found. Skipping shortcut."
 fi
 
 echo ""
@@ -125,21 +119,20 @@ echo ""
 echo "Installation complete!"
 echo ""
 echo "At the Applications menu:"
-echo "   select Other, KegLevel Monitor to run the app."
+echo "   select Other, KegLevel Lite to run the app."
 echo ""
 echo "================================================="
 echo ""
 
-read -p "Enter Y to launch the KegLevel Monitor app, or any other key to exit: " -n 1 -r
+read -p "Enter Y to launch the app, or any other key to exit: " -n 1 -r
 echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo "Launching KegLevel Monitor..."
+    echo "Launching KegLevel Lite..."
     # Launch in background, detached from terminal
-    nohup "$VENV_PYTHON_EXEC" "$PROJECT_DIR/src/main.py" >/dev/null 2>&1 &
+    nohup "$VENV_PYTHON_EXEC" "$PROJECT_DIR/src/main_kivy.py" >/dev/null 2>&1 &
     disown
     
     # Attempt to close the terminal window/session
-    # kill -HUP $PPID sends a hangup signal to the parent shell
     kill -HUP $PPID
     exit 0
 else

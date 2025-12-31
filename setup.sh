@@ -1,15 +1,15 @@
 #!/bin/bash
 # setup.sh
-# Single-line installer wrapper for KegLevel Monitor
+# Single-line installer wrapper for KegLevel Lite
 
 # 1. Define the Install Directories
-INSTALL_DIR="$HOME/keglevel"
-DATA_DIR="$HOME/keglevel-data"
-WHAT_TO_INSTALL="KegLevel Monitor Application and Data Directory"
+INSTALL_DIR="$HOME/keglevel_lite"
+DATA_DIR="$HOME/keglevel_lite-data"
+WHAT_TO_INSTALL="KegLevel Lite Application and Data Directory"
 CLEANUP_MODE="NONE"
 
 echo "========================================"
-echo "   KegLevel Monitor Auto-Installer"
+echo "   KegLevel Lite Auto-Installer"
 echo "========================================"
 
 # 2. Logic to handle existing installs
@@ -27,10 +27,10 @@ if [ -d "$INSTALL_DIR" ] || [ -d "$DATA_DIR" ]; then
     read -p "Enter selection: " choice
     
     if [ "$choice" == "APP" ]; then
-        WHAT_TO_INSTALL="KegLevel Monitor Application"
+        WHAT_TO_INSTALL="KegLevel Lite Application"
         CLEANUP_MODE="APP"
     elif [ "$choice" == "ALL" ]; then
-        WHAT_TO_INSTALL="KegLevel Monitor Application and Data Directory"
+        WHAT_TO_INSTALL="KegLevel Lite Application and Data Directory"
         CLEANUP_MODE="ALL"
     else
         echo "Cancelled."
@@ -42,20 +42,15 @@ fi
 echo ""
 echo "------------------------------------------------------------"
 echo "This script will install the $WHAT_TO_INSTALL"
-echo "and will use about 175 MB of storage space on the Pi's SD card."
+echo "and will use about 200 MB of storage space."
 echo ""
 echo "Basic installed file structure:"
 echo ""
-echo "  ~/keglevel/"
-echo "  ├── utility files..."
-echo "  ├── src/"
-echo "  │ ├── application files..."
-echo "  │ └── assets/"
-echo "  │   └── supporting files..."
-echo "  ├── venv/"
-echo "  │ └── dependencies..."
-echo "  ~/keglevel-data/"
-echo "  └── user data..."
+echo "  ~/keglevel_lite/"
+echo "  ├── src/ (Application code)"
+echo "  ├── venv/ (Dependencies)"
+echo "  ~/keglevel_lite-data/"
+echo "  └── settings.json (User data)"
 echo ""
 echo "------------------------------------------------------------"
 echo ""
@@ -92,7 +87,7 @@ if [ -d "$INSTALL_DIR" ]; then
     git pull
 else
     echo "Cloning repository to $INSTALL_DIR..."
-    git clone https://github.com/keglevelmonitor/keglevel.git "$INSTALL_DIR"
+    git clone https://github.com/keglevelmonitor/keglevel_lite.git "$INSTALL_DIR"
     cd "$INSTALL_DIR" || exit 1
 fi
 

@@ -1,66 +1,84 @@
 #!/bin/bash
 # update.sh
-# Handles pulling code AND dependency updates for KegLevel.
+# Handles checking, pulling code, and dependency updates for KegLevel Lite.
 
-# --- 1. Define Variables ---
-# Get the full path to the directory this script is in (the project root)
+# --- 1. Setup ---
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-# Define paths for the virtual environment
 VENV_DIR="$PROJECT_DIR/venv"
 VENV_PYTHON_EXEC="$VENV_DIR/bin/python"
+MODE=$1
 
-echo "--- KegLevel Update Script ---"
-echo "Starting update in $PROJECT_DIR"
+# Detect Branch (main or master)
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+echo "--- KegLevel Update Manager ---"
+echo "Root: $PROJECT_DIR"
+echo "Branch: $BRANCH"
 
 # --- 2. Check for Git Sanity ---
 if [ ! -d "$PROJECT_DIR/.git" ]; then
-    echo "[ERROR] This directory does not appear to be a Git repository."
-    echo "Please ensure you run 'git clone' first."
+    echo "[ERROR] Not a Git repository."
     exit 1
 fi
 
-# --- 3. Run Git Pull ---
-echo "--- Pulling latest code from git... ---"
-git pull
+# --- 3. FETCH & COMPARE (Common to Check and Install) ---
+echo "Fetching latest meta-data..."
+git fetch origin $BRANCH
+
+LOCAL=$(git rev-parse HEAD)
+REMOTE=$(git rev-parse origin/$BRANCH)
+
+if [ "$LOCAL" == "$REMOTE" ]; then
+    echo "Result: Up to date."
+    exit 0
+else
+    echo "Result: Update Available!"
+    echo "Local:  ${LOCAL:0:7}"
+    echo "Remote: ${REMOTE:0:7}"
+    
+    # If we are only checking, stop here
+    if [ "$MODE" == "--check" ]; then
+        exit 0
+    fi
+fi
+
+# =========================================================
+# INSTALLATION PHASE (Only runs if NOT in --check mode)
+# =========================================================
+
+echo "--- Starting Install Process ---"
+
+# --- 4. Git Pull ---
+echo "Pulling changes..."
+git pull origin $BRANCH
 if [ $? -ne 0 ]; then
-    echo "[ERROR] 'git pull' failed. Check for local changes or branch conflicts."
+    echo "[ERROR] 'git pull' failed. Check for local conflicts."
     exit 1
 fi
-echo "--- Git pull complete ---"
 
-# --- 4. *** NEW: Update System Dependencies *** ---
-echo "Checking system-level dependencies (apt)..."
-echo "You may be asked for your password."
-
-# We run the same install command as install.sh to ensure new tools (like numlockx) are present.
-# apt-get is smart enough to skip packages that are already installed.
-sudo apt-get install -y python3-tk python3-dev swig python3-venv liblgpio-dev numlockx
+# --- 5. System Dependencies (Kivy Specific) ---
+echo "Checking system dependencies (sudo)..."
+# Replaced python3-tk with Kivy SDL2 deps
+sudo apt-get install -y python3-dev python3-venv liblgpio-dev numlockx libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev
 
 if [ $? -ne 0 ]; then
-    echo "[WARNING] System dependency check failed. The app might still work, but some features could be missing."
+    echo "[WARNING] System dependency check had issues."
 fi
-# --- END NEW ---
 
-# --- 5. Run Python Dependency Installation ---
-echo "Checking for new Python dependencies..."
+# --- 6. Python Dependencies ---
+echo "Updating Python environment..."
 
-# Check if venv exists first
 if [ ! -f "$VENV_PYTHON_EXEC" ]; then
-    echo "[ERROR] Virtual environment not found at $VENV_PYTHON_EXEC"
-    echo "This script only updates an existing installation."
-    echo "Please run the ./install.sh script first."
+    echo "[ERROR] Virtual environment missing."
     exit 1
 fi
 
-# Install packages using the venv's pip
 "$VENV_PYTHON_EXEC" -m pip install -r "$PROJECT_DIR/requirements.txt"
 
-# Check if pip installation succeeded
 if [ $? -ne 0 ]; then
-    echo "[FATAL ERROR] Dependency update failed. Check internet connection or requirements.txt."
+    echo "[FATAL ERROR] Pip install failed."
     exit 1
 fi
 
-echo "--- Dependency Update Complete ---"
-echo "--- Please close and restart the KegLevel application ---"
+echo "--- Update Complete! Please Restart. ---"
+exit 0

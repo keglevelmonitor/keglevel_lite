@@ -145,10 +145,11 @@ class SettingsUpdatesTab(BoxLayout):
         python = sys.executable
         script = os.path.abspath(sys.argv[0])
         args = sys.argv[1:]
+        # This replaces the current process with a new one
         os.execv(python, [python, script] + args)
 
     def _run_update_process(self, flags, is_check_mode):
-        """Runs the bash script."""
+        """Runs the bash script in background."""
         # Locate update.sh in project root (one level up from src)
         src_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(src_dir)
@@ -161,6 +162,7 @@ class SettingsUpdatesTab(BoxLayout):
 
         cmd = ["bash", script_path] + flags
         try:
+            # Run process and capture output line-by-line
             process = subprocess.Popen(
                 cmd, 
                 stdout=subprocess.PIPE, 
@@ -175,17 +177,23 @@ class SettingsUpdatesTab(BoxLayout):
                 if not line and process.poll() is not None: break
                 if line:
                     self._append_log(line)
-                    if "update available" in line.lower(): update_available = True
+                    # Heuristic to detect availability based on script output
+                    if "Update Available!" in line: update_available = True
+
+            return_code = process.poll()
 
             if is_check_mode:
                 if update_available:
-                    self._append_log("\n[Result] Update Available!")
+                    self._append_log("\n[Result] Update Available! Click Install.")
                     self._finish_work(True)
                 else:
                     self._append_log("\n[Result] Up to date.")
                     self._finish_work(False)
             else:
-                self._append_log("\n[Complete] Please Restart App.")
+                if return_code == 0:
+                    self._append_log("\n[Complete] Update Installed. Please Restart.")
+                else:
+                    self._append_log(f"\n[Error] Update failed with code {return_code}.")
                 self._finish_work(False)
 
         except Exception as e:

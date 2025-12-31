@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=KegLevel Lite
+Comment=Keg Level Lite Monitoring
+Path=/home/raspberrypi/keglevel_lite/src
+Exec=/home/raspberrypi/keglevel_lite/venv/bin/python /home/raspberrypi/keglevel_lite/src/main_kivy.py
+Icon=/home/raspberrypi/keglevel_lite/src/assets/beer-keg.png
+Terminal=true
+Autostart=false
+Categories=X-Other;

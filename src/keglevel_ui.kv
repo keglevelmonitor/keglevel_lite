@@ -406,13 +406,7 @@
     padding: 20
     spacing: 10
     
-    Label:
-        text: "System Updates"
-        font_size: '24sp'
-        bold: True
-        size_hint_y: None
-        height: 40
-        color: 0.2, 0.8, 1, 1
+    # Header Label REMOVED to maximize space
 
     # LOG CONSOLE
     TextInput:
@@ -440,7 +434,7 @@
         Button:
             text: "INSTALL UPDATES"
             background_color: 0.2, 0.8, 0.2, 1
-            # Only enabled if check found something and not currently working
+            # Only enabled if check found something
             disabled: not root.install_enabled or root.is_working
             on_release: root.install_updates()
             
