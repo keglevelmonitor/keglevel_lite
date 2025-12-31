@@ -1,0 +1,798 @@
+#:kivy 2.0.0
+#:import NoTransition kivy.uix.screenmanager.NoTransition
+
+# --- GLOBAL STYLES ---
+
+<KegValueLabel@Label>:
+    font_size: '18sp'
+    bold: True
+    halign: 'right'
+    valign: 'middle'
+    text_size: self.size
+    size_hint_x: 0.2
+    color: 0.6, 0.8, 1, 1
+
+<NavButton@Button>:
+    background_normal: ''
+    background_color: 0.25, 0.25, 0.25, 1
+    color: 1, 1, 1, 1
+    font_size: '20sp'
+    bold: True
+    size_hint_y: 1
+
+<KegActionButton@Button>:
+    background_normal: ''
+    background_color: 0.3, 0.3, 0.3, 1
+    font_size: '14sp'
+    bold: True
+    size_hint_x: None
+    width: 100
+
+<HeaderLabel@Label>:
+    font_size: '24sp'
+    bold: True
+    color: 1, 0.75, 0, 1 # Amber
+    size_hint_y: None
+    height: 50
+    canvas.before:
+        Color:
+            rgba: 0.15, 0.15, 0.15, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+<EditLabel@Label>:
+    font_size: '18sp'
+    halign: 'left'
+    valign: 'middle'
+    text_size: self.size
+    size_hint_x: 0.35
+
+<TabButton@ToggleButton>:
+    group: 'settings_tabs'
+    font_size: '16sp'
+    bold: True
+    background_normal: ''
+    background_color: (0.2, 0.2, 0.2, 1) if self.state == 'normal' else (1, 0.75, 0, 1)
+    color: (1, 1, 1, 1) if self.state == 'normal' else (0, 0, 0, 1)
+    allow_no_selection: False
+
+# --- CUSTOM WIDGETS ---
+
+<LevelGauge>:
+    canvas:
+        Color:
+            rgba: 0.2, 0.2, 0.2, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [10, 10, 10, 10]
+        StencilPush
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [10, 10, 10, 10]
+        StencilUse
+        Color:
+            rgba: root.liquid_color 
+        Rectangle:
+            pos: self.x, self.y
+            size: self.width, (self.height * (self.percent / 100.0))
+        StencilUnUse
+        StencilPop
+        Color:
+            rgba: 0.0, 0.0, 0.0, 0.3 
+        Line:
+            points: [self.x, self.y + self.height*0.33, self.right, self.y + self.height*0.33]
+            width: 2
+        Line:
+            points: [self.x, self.y + self.height*0.66, self.right, self.y + self.height*0.66]
+            width: 2
+        Color:
+            rgba: 0.6, 0.6, 0.6, 1
+        Line:
+            rounded_rectangle: (self.x, self.y, self.width, self.height, 10)
+            width: 2
+
+<TapWidget>:
+    size_hint_x: None
+    width: dp(150)
+    orientation: 'vertical'
+    padding: 10
+    spacing: 5
+    canvas.before:
+        Color:
+            rgba: (0.2, 0.2, 0.2, 1) if self.state == 'down' else (0.12, 0.12, 0.12, 1)
+        Rectangle:
+            pos: self.pos
+            size: self.size
+    Label:
+        text: root.tap_title
+        font_size: '20sp'
+        bold: True
+        color: 1, 0.75, 0, 1
+        size_hint_y: 0.12
+    Label:
+        text: root.beverage_name
+        font_size: '16sp'
+        color: 0.9, 0.9, 0.9, 1
+        text_size: self.size
+        halign: 'center'
+        valign: 'bottom'
+        size_hint_y: 0.12
+    Label:
+        text: root.stats_text
+        font_size: '13sp'
+        color: 0.6, 0.6, 0.6, 1
+        size_hint_y: 0.08
+    LevelGauge:
+        percent: root.percent_full
+        liquid_color: root.liquid_color
+        size_hint_y: 0.58
+        size_hint_x: 0.5            
+        pos_hint: {'center_x': 0.5} 
+    Label:
+        text: root.remaining_text
+        font_size: '22sp'
+        bold: True
+        size_hint_y: 0.1
+    Label:
+        text: root.status_text
+        font_size: '14sp'
+        color: (0, 1, 0, 1) if root.status_text == "Pouring" else ((0.5, 0.5, 0.5, 1) if root.status_text != "OFFLINE" else (0.8, 0.2, 0.2, 1))
+        size_hint_y: 0.1
+
+<KegListItem>:
+    size_hint_y: None
+    height: 60
+    orientation: 'horizontal'
+    padding: 10
+    spacing: 10
+    canvas.before:
+        Color:
+            rgba: (0.2, 0.2, 0.2, 1) if self.index % 2 == 0 else (0.15, 0.15, 0.15, 1)
+        Rectangle:
+            pos: self.pos
+            size: self.size
+    Label:
+        text: root.title
+        font_size: '18sp'
+        text_size: self.size
+        halign: 'left'
+        valign: 'middle'
+        size_hint_x: 0.35
+    Label:
+        text: root.contents
+        font_size: '16sp'
+        text_size: self.size
+        halign: 'left'
+        valign: 'middle'
+        size_hint_x: 0.35
+    KegActionButton:
+        text: 'Edit'
+        on_release: app.open_keg_edit(root.keg_id)
+    KegActionButton:
+        text: 'Delete'
+        background_color: 0.6, 0.1, 0.1, 1
+        on_release: app.delete_keg(root.keg_id)
+
+<BeverageListItem>:
+    size_hint_y: None
+    height: 60
+    orientation: 'horizontal'
+    padding: 10
+    spacing: 10
+    canvas.before:
+        Color:
+            rgba: (0.2, 0.2, 0.2, 1) if self.index % 2 == 0 else (0.15, 0.15, 0.15, 1)
+        Rectangle:
+            pos: self.pos
+            size: self.size
+    Label:
+        text: root.name
+        font_size: '20sp'
+        bold: True
+        text_size: self.size
+        halign: 'left'
+        valign: 'middle'
+        size_hint_x: 0.7
+    KegActionButton:
+        text: 'Edit'
+        on_release: app.open_beverage_edit(root.bev_id)
+    KegActionButton:
+        text: 'Delete'
+        background_color: 0.6, 0.1, 0.1, 1
+        on_release: app.delete_beverage(root.bev_id)
+
+# --- POPUP WIDGETS ---
+
+<KegSelectRow@Button>:
+    background_normal: ''
+    background_color: 0.2, 0.2, 0.2, 1
+    size_hint_y: None
+    height: 48
+    text_size: self.size
+    halign: 'left'
+    valign: 'middle'
+    padding: (20, 0)
+    font_size: '18sp'
+    bold: True
+    canvas.after:
+        Color:
+            rgba: 0.4, 0.4, 0.4, 1
+        Line:
+            points: [self.x, self.y, self.right, self.y]
+            width: 1
+
+<KegSelectPopup>:
+    size_hint: 0.8, 0.9
+    auto_dismiss: True
+    title: "Select Keg for Tap"
+    title_size: '20sp'
+    BoxLayout:
+        orientation: 'vertical'
+        padding: 10
+        spacing: 10
+        RecycleView:
+            id: rv_select
+            viewclass: 'KegSelectRow'
+            scroll_type: ['bars', 'content']
+            bar_width: 20
+            RecycleBoxLayout:
+                default_size: None, dp(48)
+                default_size_hint: 1, None
+                size_hint_y: None
+                height: self.minimum_height
+                orientation: 'vertical'
+        Button:
+            text: "Cancel"
+            size_hint_y: None
+            height: 60
+            font_size: '18sp'
+            on_release: root.dismiss()
+
+# --- TABS FOR INVENTORY ---
+
+<InventoryKegsTab@BoxLayout>:
+    orientation: 'vertical'
+    BoxLayout:
+        size_hint_y: None
+        height: 40
+        padding: 10
+        Label:
+            text: "Keg Name"
+            font_size: '18sp'
+            bold: True
+            size_hint_x: 0.35
+            text_size: self.size
+            halign: 'left'
+        Label:
+            text: "Contents"
+            font_size: '18sp'
+            bold: True
+            size_hint_x: 0.35
+            text_size: self.size
+            halign: 'left'
+        Label:
+            text: "Actions"
+            font_size: '18sp'
+            bold: True
+            size_hint_x: 0.3
+    RecycleView:
+        id: rv_kegs
+        viewclass: 'KegListItem'
+        scroll_type: ['bars', 'content']
+        bar_width: 20
+        RecycleBoxLayout:
+            default_size: None, dp(60)
+            default_size_hint: 1, None
+            size_hint_y: None
+            height: self.minimum_height
+            orientation: 'vertical'
+
+<InventoryBevsTab@BoxLayout>:
+    orientation: 'vertical'
+    BoxLayout:
+        size_hint_y: None
+        height: 40
+        padding: 10
+        Label:
+            text: "Beverage Name"
+            font_size: '18sp'
+            bold: True
+            size_hint_x: 0.7
+            text_size: self.size
+            halign: 'left'
+        Label:
+            text: "Actions"
+            font_size: '18sp'
+            bold: True
+            size_hint_x: 0.3
+    RecycleView:
+        id: rv_bevs
+        viewclass: 'BeverageListItem'
+        scroll_type: ['bars', 'content']
+        bar_width: 20
+        RecycleBoxLayout:
+            default_size: None, dp(60)
+            default_size_hint: 1, None
+            size_hint_y: None
+            height: self.minimum_height
+            orientation: 'vertical'
+
+# --- TABS FOR SETTINGS ---
+
+<SettingsCalibrationTab@BoxLayout>:
+    orientation: 'vertical'
+    padding: 30
+    Label:
+        text: "Calibration Wizard\n(Coming Soon)"
+        font_size: '22sp'
+        color: 0.7, 0.7, 0.7, 1
+
+<SettingsConfigTab>:
+    orientation: 'vertical'
+    padding: 20
+    spacing: 15
+    
+    # 1. UNITS
+    BoxLayout:
+        size_hint_y: None
+        height: 60
+        spacing: 10
+        Label:
+            text: "Display Units:"
+            font_size: '22sp'
+            bold: True
+            halign: 'left'
+            valign: 'middle'
+            text_size: self.size
+            size_hint_x: 0.3
+        BoxLayout:
+            size_hint_x: 0.7
+            spacing: 20
+            ToggleButton:
+                id: btn_imperial
+                text: "US Imperial\n(Gal / lb)"
+                group: 'units'
+                allow_no_selection: False
+                font_size: '18sp'
+                bold: True
+                background_normal: ''
+                background_color: (0.2, 0.6, 0.2, 1) if self.state == 'down' else (0.2, 0.2, 0.2, 1)
+            ToggleButton:
+                id: btn_metric
+                text: "Metric\n(L / kg)"
+                group: 'units'
+                allow_no_selection: False
+                font_size: '18sp'
+                bold: True
+                background_normal: ''
+                background_color: (0.2, 0.6, 0.2, 1) if self.state == 'down' else (0.2, 0.2, 0.2, 1)
+
+    # 2. TAPS
+    BoxLayout:
+        size_hint_y: None
+        height: 60
+        Label:
+            text: "Active Taps:"
+            font_size: '22sp'
+            bold: True
+            halign: 'left'
+            valign: 'middle'
+            text_size: self.size
+            size_hint_x: 0.3
+        Spinner:
+            id: spin_taps
+            text: "4"
+            values: ["1", "2", "3", "4", "5"]
+            size_hint_x: 0.7
+            font_size: '20sp'
+            background_color: 0.25, 0.25, 0.25, 1
+    
+    # 3. SAVE
+    Button:
+        text: "Save Configuration & Restart Dashboard"
+        size_hint_y: None
+        height: 70
+        font_size: '20sp'
+        bold: True
+        background_color: 0.2, 0.6, 0.2, 1
+        on_release: root.save_config()
+
+# --- UPDATED: UPDATES TAB ---
+<SettingsUpdatesTab>:
+    orientation: 'vertical'
+    padding: 20
+    spacing: 10
+    
+    Label:
+        text: "System Updates"
+        font_size: '24sp'
+        bold: True
+        size_hint_y: None
+        height: 40
+        color: 0.2, 0.8, 1, 1
+
+    # LOG CONSOLE
+    TextInput:
+        text: root.log_text
+        readonly: True
+        background_color: 0, 0, 0, 1
+        foreground_color: 0, 1, 0, 1 # Matrix Green
+        font_size: '14sp'
+        # Uses Mono font if available, else default
+        font_name: "RobotoMono-Regular"
+        size_hint_y: 1
+
+    # ACTION BUTTONS
+    BoxLayout:
+        size_hint_y: None
+        height: 60
+        spacing: 20
+        
+        Button:
+            text: "CHECK UPDATES"
+            background_color: 0.2, 0.4, 0.8, 1
+            disabled: root.is_working
+            on_release: root.check_updates()
+
+        Button:
+            text: "INSTALL UPDATES"
+            background_color: 0.2, 0.8, 0.2, 1
+            # Only enabled if check found something and not currently working
+            disabled: not root.install_enabled or root.is_working
+            on_release: root.install_updates()
+            
+        Button:
+            text: "RESTART APP"
+            background_color: 1, 0.6, 0, 1
+            disabled: root.is_working
+            on_release: root.restart_app()
+
+<SettingsAboutTab@BoxLayout>:
+    orientation: 'vertical'
+    padding: 30
+    Label:
+        text: "KegLevel Lite v2.0\nCreated with Gemini"
+        font_size: '22sp'
+        color: 0.7, 0.7, 0.7, 1
+
+# --- SCREENS ---
+
+<DashboardScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        HeaderLabel:
+            text: "KegLevel Lite"
+        
+        # Centered Taps Layout
+        AnchorLayout:
+            anchor_x: 'center'
+            anchor_y: 'center'
+            size_hint_y: 0.85
+            BoxLayout:
+                id: tap_container
+                orientation: 'horizontal'
+                spacing: 10
+                size_hint: None, 1
+                width: self.minimum_width
+        
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint_y: 0.15
+            padding: 2
+            spacing: 2
+            NavButton:
+                text: "INVENTORY"
+                on_release: app.root.current = 'inventory'
+            NavButton:
+                text: "SETTINGS"
+                on_release: app.root.current = 'settings'
+
+<InventoryScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        HeaderLabel:
+            text: "Inventory Management"
+        BoxLayout:
+            size_hint_y: None
+            height: 50
+            padding: 5
+            spacing: 5
+            ToggleButton:
+                text: "KEGS"
+                group: 'inv_tabs'
+                state: 'down'
+                font_size: '18sp'
+                bold: True
+                background_normal: ''
+                background_color: (0.2, 0.2, 0.2, 1) if self.state == 'normal' else (1, 0.75, 0, 1)
+                color: (1, 1, 1, 1) if self.state == 'normal' else (0, 0, 0, 1)
+                on_release: root.show_kegs()
+            ToggleButton:
+                text: "BEVERAGES"
+                group: 'inv_tabs'
+                font_size: '18sp'
+                bold: True
+                background_normal: ''
+                background_color: (0.2, 0.2, 0.2, 1) if self.state == 'normal' else (1, 0.75, 0, 1)
+                color: (1, 1, 1, 1) if self.state == 'normal' else (0, 0, 0, 1)
+                on_release: root.show_bevs()
+        ScreenManager:
+            id: tab_manager
+            transition: NoTransition()
+            Screen:
+                name: 'tab_kegs'
+                InventoryKegsTab:
+                    id: kegs_tab
+            Screen:
+                name: 'tab_bevs'
+                InventoryBevsTab:
+                    id: bevs_tab
+        BoxLayout:
+            size_hint_y: None
+            height: 60
+            padding: 5
+            spacing: 10
+            Button:
+                text: "Back to Dashboard"
+                font_size: '18sp'
+                size_hint_x: 0.3
+                on_release: app.root.current = 'dashboard'
+            Label:
+                size_hint_x: 0.4
+            Button:
+                text: "+ ADD NEW"
+                font_size: '18sp'
+                bold: True
+                size_hint_x: 0.3
+                background_color: 0, 0.5, 0, 1
+                on_release: root.add_new_item()
+
+<KegEditScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        HeaderLabel:
+            text: root.screen_title
+        BoxLayout:
+            orientation: 'vertical'
+            padding: 20
+            spacing: 15
+            BoxLayout:
+                size_hint_y: None
+                height: 50
+                EditLabel:
+                    text: "Contents:"
+                Spinner:
+                    id: bev_spinner
+                    text: root.beverage_name
+                    values: root.beverage_list
+                    size_hint_x: 0.6
+                    font_size: '18sp'
+                    on_text: root.beverage_name = self.text
+            BoxLayout:
+                size_hint_y: None
+                height: 50
+                EditLabel:
+                    text: "Max Capacity:"
+                Slider:
+                    min: 1
+                    max: 60
+                    step: 0.5
+                    value: root.max_volume_liters
+                    size_hint_x: 0.4
+                    on_value: root.set_max_volume_from_slider(self.value)
+                KegValueLabel:
+                    text: root.ui_max_vol_text
+            BoxLayout:
+                size_hint_y: None
+                height: 50
+                EditLabel:
+                    text: "Empty (Tare) Weight:"
+                Slider:
+                    min: 0
+                    max: 20
+                    step: 0.1
+                    value: root.tare_weight_kg
+                    size_hint_x: 0.4
+                    on_value: root.set_tare_from_slider(self.value)
+                KegValueLabel:
+                    text: root.ui_tare_text
+            BoxLayout:
+                size_hint_y: None
+                height: 50
+                EditLabel:
+                    text: "Current Total Weight:"
+                Slider:
+                    min: 0
+                    max: 80
+                    step: 0.1
+                    value: root.total_weight_kg
+                    size_hint_x: 0.4
+                    on_value: root.set_total_from_slider(self.value)
+                KegValueLabel:
+                    text: root.ui_total_text
+            BoxLayout:
+                size_hint_y: None
+                height: 60
+                padding: (0, 10, 0, 0)
+                Label:
+                    text: "Liquid Volume:"
+                    font_size: '20sp'
+                    bold: True
+                    halign: 'right'
+                    valign: 'middle'
+                    text_size: self.size
+                    size_hint_x: 0.6
+                Label:
+                    text: root.ui_calculated_text
+                    font_size: '28sp'
+                    bold: True
+                    color: 0, 1, 0, 1
+                    halign: 'left'
+                    valign: 'middle'
+                    text_size: self.size
+                    size_hint_x: 0.4
+                    padding: (20, 0)
+        BoxLayout:
+            size_hint_y: None
+            height: 70
+            padding: 10
+            spacing: 20
+            Button:
+                text: "Cancel"
+                font_size: '18sp'
+                background_color: 0.6, 0.2, 0.2, 1
+                on_release: app.root.current = 'inventory'
+            Button:
+                text: "Save Keg"
+                font_size: '18sp'
+                bold: True
+                background_color: 0.2, 0.6, 0.2, 1
+                on_release: app.save_keg_edit()
+
+<BeverageEditScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        HeaderLabel:
+            text: root.screen_title
+        BoxLayout:
+            orientation: 'vertical'
+            padding: 30
+            spacing: 15
+            BoxLayout:
+                size_hint_y: None
+                height: 50
+                EditLabel:
+                    text: "Beverage Name:"
+                TextInput:
+                    text: root.bev_name
+                    multiline: False
+                    font_size: '20sp'
+                    size_hint_x: 0.65
+                    on_text: root.bev_name = self.text
+            BoxLayout:
+                size_hint_y: None
+                height: 50
+                EditLabel:
+                    text: "ABV % / IBU:"
+                TextInput:
+                    text: root.bev_abv
+                    multiline: False
+                    input_filter: 'float'
+                    hint_text: "ABV"
+                    font_size: '20sp'
+                    size_hint_x: 0.3
+                    on_text: root.bev_abv = self.text
+                Label:
+                    size_hint_x: 0.05
+                TextInput:
+                    text: root.bev_ibu
+                    multiline: False
+                    input_filter: 'int'
+                    hint_text: "IBU"
+                    font_size: '20sp'
+                    size_hint_x: 0.3
+                    on_text: root.bev_ibu = self.text
+            BoxLayout:
+                size_hint_y: None
+                height: 60
+                EditLabel:
+                    text: "Color (SRM):"
+                    size_hint_x: 0.3
+                Slider:
+                    min: 0
+                    max: 40
+                    step: 1
+                    value: root.bev_srm
+                    size_hint_x: 0.5
+                    on_value: root.bev_srm = int(self.value)
+                Label:
+                    text: str(root.bev_srm)
+                    font_size: '20sp'
+                    bold: True
+                    size_hint_x: 0.1
+                Widget:
+                    size_hint_x: 0.1
+                    canvas:
+                        Color:
+                            rgba: root.preview_color
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [5, 5, 5, 5]
+                        Color:
+                            rgba: 1, 1, 1, 0.3
+                        Line:
+                            rounded_rectangle: (self.x, self.y, self.width, self.height, 5)
+                            width: 1
+            Label: 
+                size_hint_y: 1 # Spacer
+        BoxLayout:
+            size_hint_y: None
+            height: 70
+            padding: 10
+            spacing: 20
+            Button:
+                text: "Cancel"
+                font_size: '18sp'
+                background_color: 0.6, 0.2, 0.2, 1
+                on_release: app.root.current = 'inventory'
+            Button:
+                text: "Save Beverage"
+                font_size: '18sp'
+                bold: True
+                background_color: 0.2, 0.6, 0.2, 1
+                on_release: app.save_beverage_edit()
+
+<SettingsScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        HeaderLabel:
+            text: "System Settings"
+        BoxLayout:
+            size_hint_y: None
+            height: 50
+            padding: 5
+            spacing: 2
+            TabButton:
+                text: "CALIBRATION"
+                state: 'down'
+                on_release: root.show_cal()
+            TabButton:
+                text: "CONFIGURATION"
+                on_release: root.show_conf()
+            TabButton:
+                text: "UPDATES"
+                on_release: root.show_upd()
+            TabButton:
+                text: "ABOUT"
+                on_release: root.show_about()
+        ScreenManager:
+            id: settings_manager
+            transition: NoTransition()
+            Screen:
+                name: 'tab_cal'
+                SettingsCalibrationTab:
+            Screen:
+                name: 'tab_conf'
+                SettingsConfigTab:
+                    id: tab_conf_content
+            Screen:
+                name: 'tab_upd'
+                SettingsUpdatesTab:
+                    id: tab_upd_content
+            Screen:
+                name: 'tab_about'
+                SettingsAboutTab:
+        BoxLayout:
+            size_hint_y: None
+            height: 60
+            padding: 5
+            spacing: 10
+            Button:
+                text: "Back to Dashboard"
+                font_size: '18sp'
+                size_hint_x: 1
+                on_release: app.root.current = 'dashboard'
