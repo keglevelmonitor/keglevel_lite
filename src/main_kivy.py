@@ -5,6 +5,21 @@ import threading
 import uuid
 import subprocess
 import sys
+import glob
+from datetime import datetime
+
+# --- 0. OS ENVIRONMENT & ICON SETUP (Must be first) ---
+# This tells the Window Manager (OS) to associate this window with our Desktop Entry
+os.environ['SDL_VIDEO_X11_WMCLASS'] = "KegLevel Lite"
+
+from kivy.config import Config
+
+# Calculate path to icon immediately
+current_dir = os.path.dirname(os.path.abspath(__file__))
+icon_path = os.path.join(current_dir, 'assets', 'beer-keg.png')
+
+# Set the icon globally for the window
+Config.set('kivy', 'window_icon', icon_path)
 
 # --- 1. KIVY CONFIGURATION ---
 from kivy.config import Config
@@ -22,6 +37,7 @@ from kivy.uix.widget import Widget
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.properties import StringProperty, NumericProperty, ObjectProperty, ListProperty, BooleanProperty
 from kivy.utils import get_color_from_hex
+from kivy.uix.screenmanager import ScreenManager, Screen, SlideTransition, NoTransition
 
 # --- 2. IMPORT BACKEND LOGIC ---
 from settings_manager import SettingsManager, UNASSIGNED_KEG_ID, UNASSIGNED_BEVERAGE_ID
@@ -145,11 +161,10 @@ class SettingsUpdatesTab(BoxLayout):
         python = sys.executable
         script = os.path.abspath(sys.argv[0])
         args = sys.argv[1:]
-        # This replaces the current process with a new one
         os.execv(python, [python, script] + args)
 
     def _run_update_process(self, flags, is_check_mode):
-        """Runs the bash script in background."""
+        """Runs the bash script."""
         # Locate update.sh in project root (one level up from src)
         src_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(src_dir)
@@ -177,7 +192,6 @@ class SettingsUpdatesTab(BoxLayout):
                 if not line and process.poll() is not None: break
                 if line:
                     self._append_log(line)
-                    # Heuristic to detect availability based on script output
                     if "Update Available!" in line: update_available = True
 
             return_code = process.poll()
@@ -231,55 +245,240 @@ class SettingsScreen(Screen):
     def show_about(self):
         self.ids.settings_manager.current = 'tab_about'
 
+class SimulationPopup(Popup):
+    def on_open(self):
+        app = App.get_running_app()
+        grid = self.ids.tap_grid
+        grid.clear_widgets()
+        for i in range(app.num_sensors):
+            from kivy.factory import Factory
+            row = Factory.SimTapRow()
+            row.tap_index = i
+            row.tap_name = f"Tap {i+1}"
+            grid.add_widget(row)
+            
+        if app.simulated_temp is not None:
+             self.ids.temp_slider.value = app.simulated_temp
+
+    # --- ADD THIS METHOD ---
+    def on_dismiss(self):
+        """Safety: Stop all flows when the popup is closed."""
+        app = App.get_running_app()
+        app.stop_all_simulations()
+    # -----------------------
+
+    def set_sim_temp(self, val):
+        app = App.get_running_app()
+        app.simulated_temp = val
+        app.update_kegerator_temp(0)
+
+    def reset_temp(self):
+        app = App.get_running_app()
+        app.simulated_temp = None
+        app.update_kegerator_temp(0)
+        
+        
 class KegEditScreen(Screen):
     screen_title = StringProperty("Edit Keg")
     keg_id = StringProperty("")
     beverage_name = StringProperty("Select Beverage")
     beverage_list = ListProperty([])
+    
+    # These properties hold the CURRENT SLIDER VALUE (whether it is Liters or Gallons)
     max_volume_liters = NumericProperty(19.0)
     tare_weight_kg = NumericProperty(4.5)
     total_weight_kg = NumericProperty(23.5)
+    
+    # Dynamic Constraints (populated based on Unit setting)
+    vol_min = NumericProperty(0.0)
+    vol_max = NumericProperty(60.0)
+    vol_step = NumericProperty(0.5)
+    
+    tare_min = NumericProperty(0.0)
+    tare_max = NumericProperty(20.0)
+    tare_step = NumericProperty(0.1)
+    
+    total_min = NumericProperty(0.0)
+    total_max = NumericProperty(80.0)
+    total_step = NumericProperty(0.1)
+
+    # UI Labels
     ui_max_vol_text = StringProperty("")
     ui_tare_text = StringProperty("")
     ui_total_text = StringProperty("")
     ui_calculated_text = StringProperty("")
+    
     is_metric = True
 
     def on_pre_enter(self):
         app = App.get_running_app()
         if app:
+            # 1. Detect Units
             units = app.settings_manager.get_display_units()
             self.is_metric = (units == "metric")
+            
+            # 2. Configure Slider Ranges & Steps
+            if self.is_metric:
+                # Metric defaults
+                self.vol_min, self.vol_max, self.vol_step = 1.0, 60.0, 0.5
+                self.tare_min, self.tare_max, self.tare_step = 0.0, 20.0, 0.1
+                self.total_min, self.total_max, self.total_step = 0.0, 80.0, 0.1
+            else:
+                # Imperial defaults (User Requested)
+                self.vol_min, self.vol_max, self.vol_step = 0.0, 16.0, 0.1  # Gal
+                self.tare_min, self.tare_max, self.tare_step = 0.0, 40.0, 0.1 # Lbs
+                self.total_min, self.total_max, self.total_step = 0.0, 170.0, 0.1 # Lbs
+
+            # 3. Load Current Database Values (Always Metric in DB)
+            keg = app.settings_manager.get_keg_by_id(self.keg_id)
+            if keg:
+                raw_vol = keg.get('maximum_full_volume_liters', 19.0)
+                raw_tare = keg.get('tare_weight_kg', 4.0)
+                raw_total = keg.get('starting_total_weight_kg', raw_tare)
+
+                # 4. Convert Values to Target Unit for Sliders
+                if self.is_metric:
+                    self.max_volume_liters = raw_vol
+                    self.tare_weight_kg = raw_tare
+                    self.total_weight_kg = raw_total
+                else:
+                    self.max_volume_liters = raw_vol * LITERS_TO_GAL
+                    self.tare_weight_kg = raw_tare * KG_TO_LBS
+                    self.total_weight_kg = raw_total * KG_TO_LBS
+                
+                # Fetch Beverage Name
+                b_id = keg.get('beverage_id')
+                lib = app.settings_manager.get_beverage_library().get('beverages', [])
+                found = next((b for b in lib if b['id'] == b_id), None)
+                self.beverage_name = found['name'] if found else "Select Beverage"
+
             self.update_display_labels()
 
     def update_display_labels(self, *args):
-        app = App.get_running_app()
-        if not app: return
-        vol_liters = app.settings_manager._calculate_volume_from_weight(
-            self.total_weight_kg, self.tare_weight_kg
-        )
+        # Calculate Liquid Volume based on current slider values and unit mode
+        density = 1.014
+        
         if self.is_metric:
+            # Inputs are already kg/L
+            liquid_kg = self.total_weight_kg - self.tare_weight_kg
+            vol_liters = liquid_kg / density
+            
+            # Update UI Strings
             self.ui_max_vol_text = f"{self.max_volume_liters:.1f} L"
             self.ui_tare_text = f"{self.tare_weight_kg:.2f} kg"
             self.ui_total_text = f"{self.total_weight_kg:.2f} kg"
             self.ui_calculated_text = f"{vol_liters:.2f} L"
+            
         else:
-            self.ui_max_vol_text = f"{(self.max_volume_liters * LITERS_TO_GAL):.1f} Gal"
-            self.ui_tare_text = f"{(self.tare_weight_kg * KG_TO_LBS):.1f} lb"
-            self.ui_total_text = f"{(self.total_weight_kg * KG_TO_LBS):.1f} lb"
-            self.ui_calculated_text = f"{(vol_liters * LITERS_TO_GAL):.2f} Gal"
+            # Inputs are Lbs/Gal
+            # 1. Convert Lbs -> Kg for density math
+            total_kg = self.total_weight_kg / KG_TO_LBS
+            tare_kg = self.tare_weight_kg / KG_TO_LBS
+            liquid_kg = total_kg - tare_kg
+            
+            # 2. Get Liters
+            vol_liters = liquid_kg / density
+            
+            # 3. Convert Liters -> Gal for display
+            vol_gal = vol_liters * LITERS_TO_GAL
+            
+            # Update UI Strings
+            self.ui_max_vol_text = f"{self.max_volume_liters:.1f} Gal"
+            self.ui_tare_text = f"{self.tare_weight_kg:.1f} lb"
+            self.ui_total_text = f"{self.total_weight_kg:.1f} lb"
+            self.ui_calculated_text = f"{vol_gal:.2f} Gal"
 
     def set_max_volume_from_slider(self, value):
         self.max_volume_liters = value
         self.update_display_labels()
+
     def set_tare_from_slider(self, value):
         self.tare_weight_kg = value
-        if self.total_weight_kg < self.tare_weight_kg: self.total_weight_kg = self.tare_weight_kg
         self.update_display_labels()
+
     def set_total_from_slider(self, value):
         self.total_weight_kg = value
-        if self.total_weight_kg < self.tare_weight_kg: self.tare_weight_kg = self.total_weight_kg
         self.update_display_labels()
+
+    def save_keg_edit(self):
+        app = App.get_running_app()
+        
+        # 1. Determine Metric Values from Sliders
+        #    (The sliders might be showing Gallons/Lbs, but DB needs Liters/Kg)
+        units = app.settings_manager.get_display_units()
+        using_metric = (units == "metric")
+        
+        if using_metric:
+            final_vol_liters = self.max_volume_liters
+            final_tare_kg = self.tare_weight_kg
+            final_total_kg = self.total_weight_kg
+        else:
+            # Convert Imperial inputs back to Metric for storage
+            final_vol_liters = self.max_volume_liters / LITERS_TO_GAL
+            final_tare_kg = self.tare_weight_kg / KG_TO_LBS
+            final_total_kg = self.total_weight_kg / KG_TO_LBS
+
+        # 2. Resolve Beverage ID from Name
+        bev_name = self.beverage_name
+        bev_id = UNASSIGNED_BEVERAGE_ID
+        if bev_name != "Empty":
+            lib = app.settings_manager.get_beverage_library().get('beverages', [])
+            found = next((b for b in lib if b['name'] == bev_name), None)
+            if found: bev_id = found['id']
+
+        # 3. Calculate Starting Liquid Volume (Always calculated in Metric)
+        density = 1.014
+        liquid_kg = final_total_kg - final_tare_kg
+        calc_start_vol = liquid_kg / density
+
+        # 4. Handle "New Keg" vs "Edit Existing"
+        #    (Restoring logic from the original KegLevelApp function)
+        is_new = (self.keg_id == "")
+        new_keg_id = self.keg_id if not is_new else str(uuid.uuid4())
+        
+        all_kegs = app.settings_manager.get_keg_definitions()
+
+        if is_new:
+            existing_count = len(all_kegs)
+            title = f"Keg {existing_count + 1:02}"
+        else:
+            # Keep existing title
+            old_keg = app.settings_manager.get_keg_by_id(new_keg_id)
+            title = old_keg['title'] if old_keg else f"Keg {new_keg_id[:4]}"
+
+        # 5. Construct the Data Dictionary
+        keg_data = {
+            "id": new_keg_id,
+            "title": title,
+            "tare_weight_kg": float(final_tare_kg),
+            "starting_total_weight_kg": float(final_total_kg),
+            "maximum_full_volume_liters": float(final_vol_liters),
+            "calculated_starting_volume_liters": float(calc_start_vol),
+            "beverage_id": bev_id,
+            "current_dispensed_liters": 0.0, 
+            "total_dispensed_pulses": 0,
+            "fill_date": datetime.now().strftime("%Y-%m-%d")
+        }
+
+        # 6. Save to List
+        if is_new:
+            all_kegs.append(keg_data)
+        else:
+            # Find and replace in place
+            for i, k in enumerate(all_kegs):
+                if k['id'] == new_keg_id:
+                    all_kegs[i] = keg_data
+                    break
+        
+        # 7. Commit Save
+        #    (Passing the required list argument)
+        app.settings_manager.save_keg_definitions(all_kegs)
+        
+        # 8. Refresh and Navigate
+        app.refresh_keg_list()
+        app.refresh_dashboard_metadata()
+        app.sensor_logic.force_recalculation()
+        app.root.current = 'inventory'
 
 class BeverageEditScreen(Screen):
     screen_title = StringProperty("Edit Beverage")
@@ -293,11 +492,270 @@ class BeverageEditScreen(Screen):
     def on_bev_srm(self, instance, value):
         self.preview_color = get_srm_color_rgba(int(value))
 
-class DashboardScreen(Screen): pass
+class SettingsCalibrationTab(BoxLayout):
+    """
+    Logic for the Auto-Detect Calibration Workflow.
+    """
+    is_metric = BooleanProperty(True)
+    locked_tap_index = NumericProperty(-1)
+    current_pulses = NumericProperty(0)
+    measured_volume = NumericProperty(0.0)
+    calculated_k = StringProperty("----")
+    instruction_text = StringProperty("Open any tap to begin calibration.")
+    deduct_inventory = BooleanProperty(True)
 
+    def on_kv_post(self, base_widget):
+        """Called once KV loading is complete. Safe to access ids here."""
+        self.init_ui()
+
+    def on_parent(self, widget, parent):
+        """Bind to the parent Screen's lifecycle events."""
+        if parent:
+            # We are inside a Screen. Bind to its events to know when we are visible.
+            parent.bind(on_enter=self.on_tab_enter)
+            parent.bind(on_leave=self.on_tab_leave)
+
+    def on_tab_enter(self, *args):
+        """Called when the user switches TO this tab."""
+        # Refresh UI settings in case units/taps changed
+        self.init_ui()
+        
+        # Start Sensor Logic
+        app = App.get_running_app()
+        if hasattr(app, 'sensor_logic') and app.sensor_logic:
+            app.sensor_logic.start_auto_calibration_mode()
+
+    def on_tab_leave(self, *args):
+        """Called when the user switches AWAY from this tab."""
+        # Stop Sensor Logic
+        app = App.get_running_app()
+        if hasattr(app, 'sensor_logic') and app.sensor_logic:
+            app.sensor_logic.stop_auto_calibration_mode()
+
+    def init_ui(self):
+        """Reset UI state and load preferences."""
+        app = App.get_running_app()
+        
+        # 1. Units
+        units = app.settings_manager.get_display_units()
+        self.is_metric = (units == "metric")
+        
+        # 2. Load Checkbox Preference
+        self.deduct_inventory = app.settings_manager.get_calibration_deduct_inventory()
+
+        # 3. Generate Tap Buttons Dynamically
+        if 'tap_buttons_container' not in self.ids:
+            return 
+
+        container = self.ids.tap_buttons_container
+        container.clear_widgets()
+        num_taps = app.settings_manager.get_displayed_taps()
+        
+        self.tap_buttons = []
+        for i in range(num_taps):
+            from kivy.uix.togglebutton import ToggleButton
+            btn = ToggleButton(
+                text=f"TAP {i+1}", 
+                group='cal_taps', 
+                state='normal',
+                disabled=True,                   # Start disabled
+                font_size='18sp',
+                bold=True,
+                background_disabled_normal='',   # REQUIRED: Removes default dark texture
+                background_normal='',            # REQUIRED: Removes default texture
+                disabled_color=(1, 1, 1, 1),     # REQUIRED: Keeps text WHITE when disabled
+                background_color=(0.3, 0.3, 0.3, 1) # Lighter Grey (Visible)
+            )
+            container.add_widget(btn)
+            self.tap_buttons.append(btn)
+            
+        # 4. Set Slider defaults
+        slider = self.ids.vol_slider
+        if self.is_metric:
+            slider.max = 1000
+            slider.step = 10
+            self.measured_volume = 500
+        else:
+            slider.max = 32
+            slider.step = 0.1
+            self.measured_volume = 16.0 
+
+        # 5. Defaults
+        self.reset_form()
+
+    def update_pulse_data(self, tap_index, pulses):
+        """Callback from SensorLogic."""
+        # 1. Lock In Logic
+        if self.locked_tap_index == -1:
+            self.locked_tap_index = tap_index
+            self.instruction_text = f"Tap {tap_index+1} Detected! Close tap when done, then adjust volume."
+            self._update_tap_buttons(tap_index)
+            
+        # 2. Update Data
+        if self.locked_tap_index == tap_index:
+            self.current_pulses = pulses
+            self.recalculate_k()
+
+    def _update_tap_buttons(self, active_index):
+        """Highlights the active tap, dims others."""
+        for i, btn in enumerate(self.tap_buttons):
+            if i == active_index:
+                btn.state = 'down'
+                btn.disabled = False
+                btn.background_color = (0.2, 0.6, 1, 1) # Blue (Active)
+                btn.color = (1, 1, 1, 1)
+            else:
+                btn.state = 'normal'
+                btn.disabled = True
+                btn.background_color = (0.3, 0.3, 0.3, 1) # Grey (Idle)
+                btn.color = (1, 1, 1, 1) # Keep text white
+
+    def adjust_volume(self, delta):
+        """Handles +/- buttons."""
+        slider = self.ids.vol_slider
+        new_val = slider.value + delta
+        # Clamp
+        new_val = max(slider.min, min(slider.max, new_val))
+        slider.value = new_val
+
+    def on_measured_volume(self, instance, value):
+        self.recalculate_k()
+
+    def recalculate_k(self):
+        """Math: K = Pulses / Liters."""
+        if self.measured_volume <= 0 or self.current_pulses <= 0:
+            self.calculated_k = "----"
+            return
+            
+        vol_liters = 0.0
+        if self.is_metric:
+            vol_liters = self.measured_volume / 1000.0 # mL -> L
+        else:
+            vol_liters = self.measured_volume * 0.0295735 # oz -> L
+            
+        if vol_liters > 0:
+            k = self.current_pulses / vol_liters
+            self.calculated_k = f"{k:.2f}"
+
+    def save_calibration(self):
+        if self.locked_tap_index == -1: return
+        try:
+            new_k = float(self.calculated_k)
+        except ValueError:
+            return # Invalid K
+
+        app = App.get_running_app()
+        
+        # 1. Save K-Factor
+        factors = app.settings_manager.get_flow_calibration_factors()
+        factors[self.locked_tap_index] = new_k
+        app.settings_manager.save_flow_calibration_factors(factors)
+        
+        # 2. Save Checkbox Pref
+        app.settings_manager.save_calibration_deduct_inventory(self.deduct_inventory)
+        
+        # 3. Deduct Inventory (Optional)
+        if self.deduct_inventory:
+            vol_liters = 0.0
+            if self.is_metric: vol_liters = self.measured_volume / 1000.0
+            else: vol_liters = self.measured_volume * 0.0295735
+            
+            if app.sensor_logic:
+                app.sensor_logic.deduct_volume_from_keg(self.locked_tap_index, vol_liters)
+                
+        # 4. Feedback & Reset
+        self.instruction_text = f"Saved! Tap {self.locked_tap_index+1} calibrated. Ready for next tap."
+        self.reset_form_soft()
+
+    def reset_calibration(self):
+        """User clicked Reset/Cancel."""
+        self.instruction_text = "Calibration cancelled. Ready for next tap."
+        self.reset_form_soft()
+
+    def reset_form_soft(self):
+        """Resets the transient calibration data, keeps the mode open."""
+        app = App.get_running_app()
+        if hasattr(app, 'sensor_logic') and app.sensor_logic:
+            app.sensor_logic.reset_auto_calibration_state()
+            
+        self.locked_tap_index = -1
+        self.current_pulses = 0
+        self.calculated_k = "----"
+        
+        # Reset Buttons
+        if hasattr(self, 'tap_buttons'):
+            for btn in self.tap_buttons:
+                btn.state = 'normal'
+                btn.disabled = True
+                btn.background_color = (0.2, 0.2, 0.2, 1)
+
+    def reset_form(self):
+        """Full reset including volume defaults."""
+        self.reset_form_soft()
+        self.instruction_text = "Open any tap to begin calibration."
+
+class DashboardScreen(Screen):
+    kegerator_temp = StringProperty("")
+    
+    _click_count = 0
+    _reset_event = None
+
+    def on_temp_area_click(self):
+        """Hidden trigger: 5 rapid clicks toggles simulation mode."""
+        self._click_count += 1
+        if self._reset_event: self._reset_event.cancel()
+        self._reset_event = Clock.schedule_once(self._reset_clicks, 1.0)
+        
+        if self._click_count >= 5:
+            self._reset_clicks(0)
+            app = App.get_running_app()
+            
+            # TOGGLE LOGIC:
+            if self.ids.footer_manager.current == 'sim_mode':
+                app.close_simulation_dashboard()
+            else:
+                app.open_simulation_dashboard()
+
+    def _reset_clicks(self, dt):
+        self._click_count = 0
+
+    def toggle_sim_footer(self, show_sim):
+        """Switches footer mode and adjusts height dynamically."""
+        sm = self.ids.footer_manager
+        
+        if show_sim:
+            # 1. Expand footer to fit stacked buttons
+            sm.size_hint_y = 0.25 
+            # 2. Slide Up
+            sm.transition.direction = 'up'
+            sm.current = 'sim_mode'
+            self._populate_sim_controls()
+        else:
+            # 1. Shrink footer back to standard Nav bar height
+            sm.size_hint_y = 0.15
+            # 2. Slide Down
+            sm.transition.direction = 'down'
+            sm.current = 'nav_mode'
+
+    def _populate_sim_controls(self):
+        """Dynamically adds SimControlWidgets to match the active taps."""
+        app = App.get_running_app()
+        container = self.ids.sim_container
+        container.clear_widgets()
+        
+        for i in range(app.num_sensors):
+            from kivy.factory import Factory
+            widget = Factory.SimControlWidget()
+            widget.tap_index = i
+            container.add_widget(widget)
+            
 # --- 4. MAIN APP CLASS ---
 
 class KegLevelApp(App):
+    simulated_temp = None  # None = use sensor, Float = use value
+    _sim_flow_event = None
+    _active_sim_taps = set()
+    
     def build(self):
         self.title = "KegLevel Lite"
         self.settings_manager = SettingsManager(len(FLOW_SENSOR_PINS))
@@ -327,15 +785,153 @@ class KegLevelApp(App):
         return self.sm
 
     def on_start(self):
+        # 1. Standard Dashboard Callback (Bridge to UI Thread)
         def bridge_callback(idx, rate, rem, status, pour_vol):
             Clock.schedule_once(lambda dt: self.update_tap_ui(idx, rate, rem, status, pour_vol))
-        callbacks = {"update_sensor_data_cb": bridge_callback, "update_cal_data_cb": lambda x, y: None}
+        
+        # 2. NEW: Calibration Callback (Bridge to UI Thread)
+        def cal_bridge_callback(idx, pulses):
+             # Find the active screen instance using the ID we added to the KV file
+             cal_tab = self.settings_screen.ids.get('tab_cal_content') 
+             if cal_tab:
+                 Clock.schedule_once(lambda dt: cal_tab.update_pulse_data(idx, pulses))
+
+        # 3. Define Callback Dictionary
+        callbacks = {
+            "update_sensor_data_cb": bridge_callback,
+            "update_cal_data_cb": lambda x, y: None, # Old manual cal callback (unused now)
+            "auto_cal_pulse_cb": cal_bridge_callback # The new Auto-Detect hook
+        }
+
+        # 4. Initialize Sensor Logic
         self.sensor_logic = SensorLogic(self.num_sensors, callbacks, self.settings_manager)
+        
+        # 5. Refresh UI Data
         self.refresh_dashboard_metadata()
         self.refresh_keg_list()
         self.refresh_beverage_list()
+        
+        # 6. Start Monitoring
         self.sensor_logic.start_monitoring()
+        self.init_temp_sensor()
 
+    def init_temp_sensor(self):
+        """Finds 1-wire temp sensor and starts update loop."""
+        base_dir = '/sys/bus/w1/devices/'
+        device_folder = glob.glob(base_dir + '28*')
+        
+        if device_folder:
+            self.temp_device_file = device_folder[0] + '/w1_slave'
+            # Update every 5 seconds
+            Clock.schedule_interval(self.update_kegerator_temp, 5.0)
+            # Run once immediately
+            self.update_kegerator_temp(0)
+        else:
+            print("No 1-wire sensor found.")
+            # Explicitly set to blank if no sensor found at startup
+            if self.dashboard_screen:
+                self.dashboard_screen.kegerator_temp = ""
+
+    def update_kegerator_temp(self, dt):
+        """Updates the temp display, preferring Simulation value if set, else reading Hardware."""
+        
+        # 1. Check Simulation Override
+        if self.simulated_temp is not None:
+            units = self.settings_manager.get_display_units()
+            if units == 'imperial':
+                t_f = self.simulated_temp * 9.0 / 5.0 + 32.0
+                self.dashboard_screen.kegerator_temp = f"{t_f:.1f} °F (Sim)"
+            else:
+                self.dashboard_screen.kegerator_temp = f"{self.simulated_temp:.1f} °C (Sim)"
+            return
+
+        # 2. Hardware Sensor Logic (Restored full logic)
+        try:
+            # If no device file detected during startup or it vanished, blank it
+            if not hasattr(self, 'temp_device_file') or not os.path.exists(self.temp_device_file):
+                self.dashboard_screen.kegerator_temp = ""
+                return
+
+            with open(self.temp_device_file, 'r') as f:
+                lines = f.readlines()
+            
+            # Check CRC and parse
+            if len(lines) > 0 and lines[0].strip()[-3:] == 'YES':
+                equals_pos = lines[1].find('t=')
+                if equals_pos != -1:
+                    temp_string = lines[1][equals_pos+2:]
+                    temp_c = float(temp_string) / 1000.0
+                    
+                    units = self.settings_manager.get_display_units()
+                    if units == 'imperial':
+                        temp_f = temp_c * 9.0 / 5.0 + 32.0
+                        self.dashboard_screen.kegerator_temp = f"{temp_f:.1f} °F"
+                    else:
+                        self.dashboard_screen.kegerator_temp = f"{temp_c:.1f} °C"
+        except Exception:
+            # On read error, default to blank
+            self.dashboard_screen.kegerator_temp = ""
+
+
+    # --- NEW: Simulation Methods ---
+    def open_simulation_dashboard(self):
+        """Switches the Dashboard footer to Simulation Mode."""
+        # Ensure we are on the dashboard screen
+        self.root.current = 'dashboard'
+        self.dashboard_screen.toggle_sim_footer(True)
+        self.simulated_temp = 4.0 # Default start temp
+        self.update_kegerator_temp(0)
+
+    def close_simulation_dashboard(self):
+        """Stops flows and returns footer to normal."""
+        self.stop_all_simulations()
+        self.simulated_temp = None
+        self.update_kegerator_temp(0)
+        self.dashboard_screen.toggle_sim_footer(False)
+        
+        
+    def sim_pour_volume(self, tap_index, volume_liters):
+        """Instantly inject pulses to simulate a poured volume."""
+        k = self.settings_manager.get_flow_calibration_factors()[tap_index]
+        pulses = int(volume_liters * k)
+        if self.sensor_logic:
+            self.sensor_logic.simulate_pulse_increment(tap_index, pulses)
+
+    def sim_toggle_flow(self, tap_index, is_flowing):
+        """Add/Remove tap from continuous flow loop."""
+        if is_flowing:
+            self._active_sim_taps.add(tap_index)
+            if not self._sim_flow_event:
+                # Start the loop (20Hz)
+                self._sim_flow_event = Clock.schedule_interval(self._sim_flow_loop, 0.05)
+        else:
+            self._active_sim_taps.discard(tap_index)
+            if not self._active_sim_taps and self._sim_flow_event:
+                self._sim_flow_event.cancel()
+                self._sim_flow_event = None
+
+    def _sim_flow_loop(self, dt):
+        """Inject small pulses periodically to simulate flow rate."""
+        # Simulate ~3 L/min (50ml per second -> 2.5ml per 0.05s tick)
+        # pulses = 2.5ml * k-factor (approx 5 pulses per tick)
+        for tap_idx in self._active_sim_taps:
+            k = self.settings_manager.get_flow_calibration_factors()[tap_idx]
+            # Calculate pulses for 0.05s at 3L/min
+            # 3 L/min = 0.05 L/sec = 0.0025 L/tick
+            pulses = int(0.0025 * k)
+            if self.sensor_logic:
+                self.sensor_logic.simulate_pulse_increment(tap_idx, max(1, pulses))
+            
+        # --- NEW METHOD: Stop all flows ---
+    def stop_all_simulations(self):
+        """Stops the continuous flow loop and clears active taps."""
+        if self._sim_flow_event:
+            self._sim_flow_event.cancel()
+            self._sim_flow_event = None
+        self._active_sim_taps.clear()
+        print("Simulation: All flows stopped.")
+
+    
     def update_tap_ui(self, idx, rate, rem, status, pour_vol):
         if idx >= len(self.tap_widgets): return
         widget = self.tap_widgets[idx]
@@ -443,18 +1039,23 @@ class KegLevelApp(App):
         })
         for keg in all_kegs:
             k_id = keg['id']
+            # Show keg if it's unassigned OR if it's currently assigned to THIS tap
             if (k_id not in assigned_set) or (assignments[tap_index] == k_id):
                 b_id = keg.get('beverage_id')
                 bev_lib = self.settings_manager.get_beverage_library().get('beverages', [])
                 found_bev = next((b for b in bev_lib if b['id'] == b_id), None)
                 b_name = found_bev['name'] if found_bev else "Empty"
                 
-                start = keg.get('maximum_full_volume_liters', 0)
+                # --- FIX: Use calculated start volume, not max capacity ---
+                start = keg.get('calculated_starting_volume_liters', 0.0)
                 disp = keg.get('current_dispensed_liters', 0)
-                rem = max(0, start - disp)
+                
+                # Calculate remaining (allowing negative for calibration visibility)
+                rem = start - disp
+                # ----------------------------------------------------------
                 
                 units = self.settings_manager.get_display_units()
-                vol_str = f"{rem:.1f}L" if units == "metric" else f"{(rem * LITERS_TO_GAL):.1f}Gal"
+                vol_str = f"{rem:.2f}L" if units == "metric" else f"{(rem * LITERS_TO_GAL):.2f}Gal"
                 
                 data_list.append({
                     'text': f"{keg['title']} ({b_name}) - {vol_str}",
@@ -465,10 +1066,15 @@ class KegLevelApp(App):
         popup.open()
 
     def select_keg_for_tap(self, tap_index, keg_id, popup_instance):
-        popup_instance.dismiss()
+        # --- INTERCEPT KEG KICKED ACTION ---
         if keg_id == KEG_KICKED_ID:
-            print(f"TODO: Trigger Calibration for Tap {tap_index}")
-            keg_id = UNASSIGNED_KEG_ID
+            # Prepare data for the Calibration Screen
+            self.prepare_keg_kick_screen(tap_index, popup_instance)
+            return
+        # -----------------------------------
+
+        popup_instance.dismiss()
+        
         self.settings_manager.save_sensor_keg_assignment(tap_index, keg_id)
         if keg_id == UNASSIGNED_KEG_ID:
             self.settings_manager.save_sensor_beverage_assignment(tap_index, UNASSIGNED_BEVERAGE_ID)
@@ -476,9 +1082,101 @@ class KegLevelApp(App):
             keg = self.settings_manager.get_keg_by_id(keg_id)
             b_id = keg.get('beverage_id', UNASSIGNED_BEVERAGE_ID)
             self.settings_manager.save_sensor_beverage_assignment(tap_index, b_id)
+            
         self.sensor_logic.force_recalculation()
         self.refresh_dashboard_metadata()
         self.update_tap_ui(tap_index, 0, 0, "Idle", 0)
+        
+    def prepare_keg_kick_screen(self, tap_index, popup):
+        """Calculates stats for the kicked keg and switches popup to calibrate view."""
+        # 1. Identify the Keg currently on this tap
+        assignments = self.settings_manager.get_sensor_keg_assignments()
+        if tap_index >= len(assignments): return
+        
+        keg_id = assignments[tap_index]
+        keg = self.settings_manager.get_keg_by_id(keg_id)
+        
+        if not keg or keg_id == UNASSIGNED_KEG_ID:
+            print("Error: No keg assigned to this tap to calibrate.")
+            popup.dismiss()
+            return
+
+        # 2. Gather Data
+        start_vol = keg.get('calculated_starting_volume_liters', 0.0)
+        total_pulses = keg.get('total_dispensed_pulses', 0)
+        current_k = self.settings_manager.get_flow_calibration_factors()[tap_index]
+
+        # 3. Calculate New K
+        new_k = 0.0
+        is_valid = False
+        if start_vol > 0 and total_pulses > 0:
+            new_k = total_pulses / start_vol
+            is_valid = True
+
+        # 4. Populate Popup Properties
+        popup.tap_index = tap_index
+        popup.cal_keg_id = keg_id
+        popup.cal_keg_title = keg.get('title', 'Unknown')
+        popup.cal_start_vol = f"{start_vol:.2f} L"
+        popup.cal_total_pulses = str(int(total_pulses))
+        popup.cal_old_k = f"{current_k:.2f}"
+        popup.cal_new_k = f"{new_k:.2f}"
+        popup.cal_is_valid = is_valid
+        
+        # Reset checkbox state
+        popup.ids.chk_confirm.active = False
+        popup.cal_confirmed = False
+
+        # 5. Switch Screen
+        popup.ids.sm.current = 'calibrate'
+
+    def commit_keg_kick_calibration(self, popup):
+        """Atomic Save: Updates K-Factor, Unassigns Tap, Resets Keg, Closes Popup."""
+        try:
+            new_k = float(popup.cal_new_k)
+        except ValueError:
+            return # Should be prevented by UI disabled state
+
+        tap_index = popup.tap_index
+        keg_id = popup.cal_keg_id
+        
+        print(f"Committing Calibration for Tap {tap_index+1}. New K: {new_k}")
+
+        # 1. Update K-Factor for the Tap
+        factors = self.settings_manager.get_flow_calibration_factors()
+        factors[tap_index] = new_k
+        self.settings_manager.save_flow_calibration_factors(factors)
+
+        # 2. Unassign Keg from Tap
+        self.settings_manager.save_sensor_keg_assignment(tap_index, UNASSIGNED_KEG_ID)
+        self.settings_manager.save_sensor_beverage_assignment(tap_index, UNASSIGNED_BEVERAGE_ID)
+
+        # 3. Reset Keg Data
+        all_kegs = self.settings_manager.get_keg_definitions()
+        for keg in all_kegs:
+            if keg.get('id') == keg_id:
+                # Clear contents and counters
+                keg['beverage_id'] = UNASSIGNED_BEVERAGE_ID
+                keg['fill_date'] = ""
+                keg['current_dispensed_liters'] = 0.0
+                keg['total_dispensed_pulses'] = 0
+                
+                # CRITICAL: Reset the physical weight to empty (Tare)
+                # This ensures the "Starting Volume" becomes 0.0L
+                tare = keg.get('tare_weight_kg', 0.0)
+                keg['starting_total_weight_kg'] = tare
+                keg['calculated_starting_volume_liters'] = 0.0
+                break
+                
+        self.settings_manager.save_keg_definitions(all_kegs)
+
+        # 4. Refresh System
+        self.sensor_logic.force_recalculation()
+        self.refresh_dashboard_metadata()
+        self.update_tap_ui(tap_index, 0, 0, "Idle", 0)
+
+        # 5. Close Popup
+        popup.dismiss()
 
     # --- Actions: KEGS ---
     def open_keg_edit(self, keg_id):
@@ -507,45 +1205,46 @@ class KegLevelApp(App):
         self.keg_edit_screen.update_display_labels()
         self.root.current = 'keg_edit'
 
-    def save_keg_edit(self):
-        scr = self.keg_edit_screen
-        bev_name = scr.beverage_name
-        bev_id = UNASSIGNED_BEVERAGE_ID
-        if bev_name != "Empty":
-            bev_lib = self.settings_manager.get_beverage_library().get('beverages', [])
-            found = next((b for b in bev_lib if b['name'] == bev_name), None)
-            if found: bev_id = found['id']
-        vol_liters = self.settings_manager._calculate_volume_from_weight(scr.total_weight_kg, scr.tare_weight_kg)
-        is_new = (scr.keg_id == "")
-        new_keg_id = scr.keg_id if not is_new else str(uuid.uuid4())
-        if is_new:
-            existing_count = len(self.settings_manager.get_keg_definitions())
-            title = f"Keg {existing_count + 1:02}"
-        else:
-            old_keg = self.settings_manager.get_keg_by_id(new_keg_id)
-            title = old_keg['title']
-        keg_data = {
-            "id": new_keg_id,
-            "title": title,
-            "tare_weight_kg": float(scr.tare_weight_kg),
-            "starting_total_weight_kg": float(scr.total_weight_kg),
-            "maximum_full_volume_liters": float(scr.max_volume_liters),
-            "calculated_starting_volume_liters": vol_liters,
-            "beverage_id": bev_id,
-            "current_dispensed_liters": 0.0, 
-            "total_dispensed_pulses": 0,
-            "fill_date": ""
-        }
-        all_kegs = self.settings_manager.get_keg_definitions()
-        if is_new: all_kegs.append(keg_data)
-        else:
-            for i, k in enumerate(all_kegs):
-                if k['id'] == new_keg_id: all_kegs[i] = keg_data; break
-        self.settings_manager.save_keg_definitions(all_kegs)
-        self.refresh_keg_list()
-        self.refresh_dashboard_metadata()
-        self.sensor_logic.force_recalculation()
-        self.root.current = 'inventory'
+    # ~ DUPLICATE FUNCTION? THIS FUNCTION EXISTS IN CLASS KEGLEVELEDIT
+    # ~ def save_keg_edit(self):
+        # ~ scr = self.keg_edit_screen
+        # ~ bev_name = scr.beverage_name
+        # ~ bev_id = UNASSIGNED_BEVERAGE_ID
+        # ~ if bev_name != "Empty":
+            # ~ bev_lib = self.settings_manager.get_beverage_library().get('beverages', [])
+            # ~ found = next((b for b in bev_lib if b['name'] == bev_name), None)
+            # ~ if found: bev_id = found['id']
+        # ~ vol_liters = self.settings_manager._calculate_volume_from_weight(scr.total_weight_kg, scr.tare_weight_kg)
+        # ~ is_new = (scr.keg_id == "")
+        # ~ new_keg_id = scr.keg_id if not is_new else str(uuid.uuid4())
+        # ~ if is_new:
+            # ~ existing_count = len(self.settings_manager.get_keg_definitions())
+            # ~ title = f"Keg {existing_count + 1:02}"
+        # ~ else:
+            # ~ old_keg = self.settings_manager.get_keg_by_id(new_keg_id)
+            # ~ title = old_keg['title']
+        # ~ keg_data = {
+            # ~ "id": new_keg_id,
+            # ~ "title": title,
+            # ~ "tare_weight_kg": float(scr.tare_weight_kg),
+            # ~ "starting_total_weight_kg": float(scr.total_weight_kg),
+            # ~ "maximum_full_volume_liters": float(scr.max_volume_liters),
+            # ~ "calculated_starting_volume_liters": vol_liters,
+            # ~ "beverage_id": bev_id,
+            # ~ "current_dispensed_liters": 0.0, 
+            # ~ "total_dispensed_pulses": 0,
+            # ~ "fill_date": ""
+        # ~ }
+        # ~ all_kegs = self.settings_manager.get_keg_definitions()
+        # ~ if is_new: all_kegs.append(keg_data)
+        # ~ else:
+            # ~ for i, k in enumerate(all_kegs):
+                # ~ if k['id'] == new_keg_id: all_kegs[i] = keg_data; break
+        # ~ self.settings_manager.save_keg_definitions(all_kegs)
+        # ~ self.refresh_keg_list()
+        # ~ self.refresh_dashboard_metadata()
+        # ~ self.sensor_logic.force_recalculation()
+        # ~ self.root.current = 'inventory'
 
     def delete_keg(self, keg_id):
         self.settings_manager.delete_keg_definition(keg_id)

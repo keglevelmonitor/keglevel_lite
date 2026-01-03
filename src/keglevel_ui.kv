@@ -1,5 +1,6 @@
 #:kivy 2.0.0
 #:import NoTransition kivy.uix.screenmanager.NoTransition
+#:import SlideTransition kivy.uix.screenmanager.SlideTransition
 
 # --- GLOBAL STYLES ---
 
@@ -19,6 +20,21 @@
     font_size: '20sp'
     bold: True
     size_hint_y: 1
+
+<FineTuneButton@Button>:
+    background_normal: ''
+    background_color: 0.25, 0.25, 0.25, 1
+    font_size: '24sp'
+    bold: True
+    color: 0.6, 0.8, 1, 1  # Cyan text
+    size_hint_x: None
+    width: dp(45)
+    canvas.before:
+        Color:
+            rgba: 0.4, 0.4, 0.4, 1
+        Line:
+            rounded_rectangle: (self.x, self.y, self.width, self.height, 5)
+            width: 1
 
 <KegActionButton@Button>:
     background_normal: ''
@@ -118,8 +134,8 @@
         color: 0.9, 0.9, 0.9, 1
         text_size: self.size
         halign: 'center'
-        valign: 'bottom'
-        size_hint_y: 0.12
+        valign: 'middle'   # CHANGED: 'middle' centers 1 line, accommodates 2 lines
+        size_hint_y: 0.18  # INCREASED: Was 0.12 (Adds room for 2nd line)
     Label:
         text: root.stats_text
         font_size: '13sp'
@@ -128,7 +144,7 @@
     LevelGauge:
         percent: root.percent_full
         liquid_color: root.liquid_color
-        size_hint_y: 0.58
+        size_hint_y: 0.52  # DECREASED: Was 0.58 (Compensates for name label)
         size_hint_x: 0.5            
         pos_hint: {'center_x': 0.5} 
     Label:
@@ -141,7 +157,7 @@
         font_size: '14sp'
         color: (0, 1, 0, 1) if root.status_text == "Pouring" else ((0.5, 0.5, 0.5, 1) if root.status_text != "OFFLINE" else (0.8, 0.2, 0.2, 1))
         size_hint_y: 0.1
-
+        
 <KegListItem>:
     size_hint_y: None
     height: 60
@@ -190,8 +206,8 @@
             size: self.size
     Label:
         text: root.name
-        font_size: '20sp'
-        bold: True
+        font_size: '18sp'   # CHANGED: Was 20sp
+        # REMOVED: bold: True (Matches KegListItem style)
         text_size: self.size
         halign: 'left'
         valign: 'middle'
@@ -205,6 +221,123 @@
         on_release: app.delete_beverage(root.bev_id)
 
 # --- POPUP WIDGETS ---
+<SimulationPopup>:
+    title: "Developer Simulation Dashboard"
+    title_size: '18sp'
+    title_align: 'center'
+    
+    # Force the popup to be a floating window, not full screen
+    size_hint: None, None
+    size: 600, 350
+    
+    # CRITICAL FIX: Make the area behind the popup semi-transparent
+    overlay_color: 0, 0, 0, 0.5
+    
+    # Hide the default Kivy popup background texture
+    background_color: 0, 0, 0, 0
+    
+    auto_dismiss: False
+    
+    # Draw our own background with an Amber border
+    canvas.before:
+        Color:
+            rgba: 0.1, 0.1, 0.1, 1  # Dark Grey Background
+        Rectangle:
+            pos: self.pos
+            size: self.size
+        Color:
+            rgba: 1, 0.75, 0, 1  # Amber Border
+        Line:
+            rectangle: self.x, self.y, self.width, self.height
+            width: 2
+
+    BoxLayout:
+        orientation: 'vertical'
+        padding: 10
+        spacing: 10
+        
+        # --- TEMPERATURE SIMULATION ---
+        BoxLayout:
+            size_hint_y: None
+            height: 60
+            orientation: 'horizontal'
+            spacing: 10
+            Label:
+                text: "Sim Temp:"
+                bold: True
+                size_hint_x: 0.2
+            Label:
+                text: "{:.1f}".format(temp_slider.value)
+                size_hint_x: 0.15
+                font_size: '18sp'
+                color: 0, 1, 0, 1
+            Slider:
+                id: temp_slider
+                min: -5
+                max: 80
+                value: 4.0
+                on_value: root.set_sim_temp(self.value)
+                size_hint_x: 0.35
+            Button:
+                text: "Reset"
+                size_hint_x: 0.3
+                background_color: 0.3, 0.3, 0.3, 1
+                on_release: root.reset_temp()
+
+        # --- FLOW SIMULATION HEADER ---
+        Label:
+            text: "Simulate Flow"
+            bold: True
+            size_hint_y: None
+            height: 30
+            color: 0.7, 0.7, 0.7, 1
+            
+        # --- TAP LIST ---
+        ScrollView:
+            size_hint_y: 1
+            canvas.before:
+                Color:
+                    rgba: 0.15, 0.15, 0.15, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            GridLayout:
+                id: tap_grid
+                cols: 1
+                spacing: 2
+                size_hint_y: None
+                height: self.minimum_height
+                padding: 5
+
+        # --- CLOSE BUTTON ---
+        Button:
+            text: "Close Dashboard"
+            size_hint_y: None
+            height: 50
+            bold: True
+            background_color: 0.4, 0.1, 0.1, 1
+            on_release: root.dismiss()
+
+<SimTapRow@BoxLayout>:
+    tap_index: 0
+    tap_name: "Tap ?"
+    size_hint_y: None
+    height: 40
+    spacing: 10
+    Label:
+        text: root.tap_name
+        size_hint_x: 0.2
+        bold: True
+    Button:
+        text: "Pour Pint (0.5L)"
+        size_hint_x: 0.4
+        background_color: 0.2, 0.4, 0.6, 1
+        on_release: app.sim_pour_volume(root.tap_index, 0.5)
+    ToggleButton:
+        text: "Continuous Flow"
+        size_hint_x: 0.4
+        background_color: (0, 0.6, 0, 1) if self.state == 'down' else (0.3, 0.3, 0.3, 1)
+        on_state: app.sim_toggle_flow(root.tap_index, self.state == 'down')
 
 <KegSelectRow@Button>:
     background_normal: ''
@@ -226,30 +359,158 @@
 
 <KegSelectPopup>:
     size_hint: 0.8, 0.9
-    auto_dismiss: True
+    auto_dismiss: False
     title: "Select Keg for Tap"
     title_size: '20sp'
-    BoxLayout:
-        orientation: 'vertical'
-        padding: 10
-        spacing: 10
-        RecycleView:
-            id: rv_select
-            viewclass: 'KegSelectRow'
-            scroll_type: ['bars', 'content']
-            bar_width: 20
-            RecycleBoxLayout:
-                default_size: None, dp(48)
-                default_size_hint: 1, None
-                size_hint_y: None
-                height: self.minimum_height
+    
+    # Data Properties for Calibration
+    tap_index: -1
+    cal_keg_id: ""
+    cal_keg_title: "Unknown"
+    cal_start_vol: "--"
+    cal_total_pulses: "--"
+    cal_old_k: "--"
+    cal_new_k: "--"
+    cal_is_valid: False
+    cal_confirmed: False
+
+    ScreenManager:
+        id: sm
+        transition: NoTransition()
+        
+        # SCREEN 1: LIST SELECTION (Existing functionality)
+        Screen:
+            name: 'list'
+            BoxLayout:
                 orientation: 'vertical'
-        Button:
-            text: "Cancel"
-            size_hint_y: None
-            height: 60
-            font_size: '18sp'
-            on_release: root.dismiss()
+                padding: 10
+                spacing: 10
+                RecycleView:
+                    id: rv_select
+                    viewclass: 'KegSelectRow'
+                    scroll_type: ['bars', 'content']
+                    bar_width: 20
+                    RecycleBoxLayout:
+                        default_size: None, dp(48)
+                        default_size_hint: 1, None
+                        size_hint_y: None
+                        height: self.minimum_height
+                        orientation: 'vertical'
+                Button:
+                    text: "Cancel"
+                    size_hint_y: None
+                    height: 60
+                    font_size: '18sp'
+                    on_release: root.dismiss()
+
+        # SCREEN 2: KEG KICKED CALIBRATION
+        Screen:
+            name: 'calibrate'
+            BoxLayout:
+                orientation: 'vertical'
+                padding: 20
+                spacing: 15
+                
+                # --- INFO SECTION ---
+                Label:
+                    text: "Calibration Data for " + root.cal_keg_title
+                    font_size: '20sp'
+                    bold: True
+                    color: 1, 0.75, 0, 1
+                    size_hint_y: None
+                    height: 40
+
+                GridLayout:
+                    cols: 2
+                    spacing: 10
+                    size_hint_y: None
+                    height: 160
+                    
+                    Label:
+                        text: "Starting Volume:"
+                        halign: 'right'
+                        color: 0.7, 0.7, 0.7, 1
+                    Label:
+                        text: root.cal_start_vol
+                        bold: True
+                        halign: 'left'
+                        
+                    Label:
+                        text: "Total Pulses:"
+                        halign: 'right'
+                        color: 0.7, 0.7, 0.7, 1
+                    Label:
+                        text: root.cal_total_pulses
+                        bold: True
+                        halign: 'left'
+
+                    Label:
+                        text: "Current K-Factor:"
+                        halign: 'right'
+                        color: 0.7, 0.7, 0.7, 1
+                    Label:
+                        text: root.cal_old_k
+                        halign: 'left'
+
+                    Label:
+                        text: "CALCULATED NEW K-FACTOR:"
+                        halign: 'right'
+                        color: 0.5, 1, 0.5, 1
+                        bold: True
+                    Label:
+                        text: root.cal_new_k
+                        font_size: '22sp'
+                        bold: True
+                        color: 0.5, 1, 0.5, 1
+                        halign: 'left'
+
+                # --- CONFIRMATION ---
+                BoxLayout:
+                    size_hint_y: None
+                    height: 60
+                    spacing: 10
+                    padding: 5 # Added padding for visual breathing room inside the color block
+                    
+                    # Light Green Background
+                    canvas.before:
+                        Color:
+                            rgba: 0.2, 0.6, 0.2, 0.5 # Matches Save Button Green, 50% opacity
+                        Rectangle:
+                            pos: self.pos
+                            size: self.size
+
+                    CheckBox:
+                        id: chk_confirm
+                        size_hint_x: None
+                        width: 50
+                        on_active: root.cal_confirmed = self.active
+                        color: 1, 1, 1, 1
+                    
+                    Label:
+                        text: "This keg is empty and was fully dispensed from this tap."
+                        text_size: self.size
+                        valign: 'middle'
+                        # Ensure text stands out against green
+                        color: 1, 1, 1, 1 
+                        bold: True
+
+                # --- ACTIONS ---
+                BoxLayout:
+                    spacing: 20
+                    size_hint_y: None
+                    height: 70
+                    
+                    Button:
+                        text: "Cancel"
+                        background_color: 0.4, 0.4, 0.4, 1
+                        on_release: root.ids.sm.current = 'list'
+                        
+                    Button:
+                        text: "SAVE CALIBRATION & RESET"
+                        bold: True
+                        background_color: 0.2, 0.7, 0.2, 1
+                        disabled: not (root.cal_is_valid and root.cal_confirmed)
+                        on_release: app.commit_keg_kick_calibration(root)
 
 # --- TABS FOR INVENTORY ---
 
@@ -322,13 +583,175 @@
 
 # --- TABS FOR SETTINGS ---
 
-<SettingsCalibrationTab@BoxLayout>:
+<SettingsCalibrationTab>:
     orientation: 'vertical'
-    padding: 30
+    padding: 10
+    spacing: 10
+    
+    # --- ROW 1: TABS (Dynamic) ---
+    BoxLayout:
+        id: tap_buttons_container
+        size_hint_y: None
+        height: 60              # Increased height slightly for visibility
+        spacing: 10
+        # Buttons are added here by Python init_ui()
+
+    # --- ROW 2: INSTRUCTIONS ---
     Label:
-        text: "Calibration Wizard\n(Coming Soon)"
-        font_size: '22sp'
-        color: 0.7, 0.7, 0.7, 1
+        text: root.instruction_text
+        font_size: '16sp'
+        color: 0.8, 0.8, 0.8, 1
+        size_hint_y: None
+        height: 30
+        text_size: self.size
+        halign: 'center'
+        valign: 'middle'
+
+    # --- ROW 3: SLIDER CONTROLS ---
+    BoxLayout:
+        size_hint_y: None
+        height: 60
+        spacing: 10
+        
+        # Measured Vol Label
+        BoxLayout:
+            orientation: 'vertical'
+            size_hint_x: None
+            width: 100
+            Label:
+                text: "Measured Vol:"
+                font_size: '12sp'
+                color: 0.7, 0.7, 0.7, 1
+            Label:
+                text: "{:.0f} {}".format(root.measured_volume, "mL" if root.is_metric else "oz") if root.is_metric else "{:.1f} {}".format(root.measured_volume, "oz")
+                font_size: '20sp'
+                bold: True
+
+        # Minus Button
+        Button:
+            text: "-"
+            font_size: '24sp'
+            bold: True
+            size_hint_x: None
+            width: 50
+            background_color: 0.3, 0.3, 0.3, 1
+            on_release: root.adjust_volume(-10 if root.is_metric else -0.1)
+
+        # Slider
+        Slider:
+            id: vol_slider
+            min: 0
+            max: 1000 # overridden in python
+            value: root.measured_volume
+            on_value: root.measured_volume = self.value
+
+        # Plus Button
+        Button:
+            text: "+"
+            font_size: '24sp'
+            bold: True
+            size_hint_x: None
+            width: 50
+            background_color: 0.3, 0.3, 0.3, 1
+            on_release: root.adjust_volume(10 if root.is_metric else 0.1)
+
+    # --- ROW 4: PULSES & RESULT ---
+    BoxLayout:
+        size_hint_y: None
+        height: 100
+        spacing: 20
+        padding: (20, 10)
+
+        # Pulses Box
+        BoxLayout:
+            orientation: 'vertical'
+            size_hint_x: None
+            width: 180
+            canvas.before:
+                Color:
+                    rgba: 0.1, 0.1, 0.1, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+                Color:
+                    rgba: 0.2, 0.6, 0.8, 1 # Blue Border
+                Line:
+                    rectangle: self.x, self.y, self.width, self.height
+                    width: 2
+            
+            Label:
+                text: str(int(root.current_pulses))
+                font_size: '40sp'
+                bold: True
+                color: 0.2, 0.7, 1, 1 # Light Blue
+            Label:
+                text: "PULSES DETECTED"
+                font_size: '10sp'
+                color: 0.6, 0.6, 0.6, 1
+                size_hint_y: None
+                height: 20
+
+        # K-Factor & Checkbox Area
+        BoxLayout:
+            orientation: 'vertical'
+            spacing: 10
+            
+            # K-Factor Display
+            BoxLayout:
+                padding: 10
+                canvas.before:
+                    Color:
+                        rgba: 0.15, 0.15, 0.15, 1
+                    Rectangle:
+                        pos: self.pos
+                        size: self.size
+                Label:
+                    text: "New K-Factor:"
+                    font_size: '18sp'
+                    halign: 'left'
+                    size_hint_x: 0.6
+                Label:
+                    text: root.calculated_k
+                    font_size: '24sp'
+                    bold: True
+                    color: 0, 1, 0, 1 # Green
+                    halign: 'right'
+                    size_hint_x: 0.4
+            
+            # Deduct Checkbox
+            BoxLayout:
+                spacing: 10
+                CheckBox:
+                    active: root.deduct_inventory
+                    on_active: root.deduct_inventory = self.active
+                    size_hint_x: None
+                    width: 40
+                Label:
+                    text: "Deduct volume from Inventory?"
+                    font_size: '14sp'
+                    text_size: self.size
+                    valign: 'middle'
+
+    # --- ROW 5: ACTION BUTTONS ---
+    BoxLayout:
+        size_hint_y: None
+        height: 60
+        spacing: 20
+        
+        Button:
+            text: "RESET / CANCEL"
+            font_size: '16sp'
+            bold: True
+            background_color: 0.4, 0.4, 0.4, 1
+            on_release: root.reset_calibration()
+
+        Button:
+            text: "SAVE CALIBRATION"
+            font_size: '16sp'
+            bold: True
+            background_color: 0.2, 0.7, 0.2, 1 # Green
+            disabled: root.locked_tap_index == -1
+            on_release: root.save_calibration()
 
 <SettingsConfigTab>:
     orientation: 'vertical'
@@ -392,7 +815,7 @@
     
     # 3. SAVE
     Button:
-        text: "Save Configuration & Restart Dashboard"
+        text: "Save System Settings & Restart Dashboard"
         size_hint_y: None
         height: 70
         font_size: '20sp'
@@ -400,14 +823,11 @@
         background_color: 0.2, 0.6, 0.2, 1
         on_release: root.save_config()
 
-# --- UPDATED: UPDATES TAB ---
 <SettingsUpdatesTab>:
     orientation: 'vertical'
     padding: 20
     spacing: 10
     
-    # Header Label REMOVED to maximize space
-
     # LOG CONSOLE
     TextInput:
         text: root.log_text
@@ -415,7 +835,6 @@
         background_color: 0, 0, 0, 1
         foreground_color: 0, 1, 0, 1 # Matrix Green
         font_size: '14sp'
-        # Uses Mono font if available, else default
         font_name: "RobotoMono-Regular"
         size_hint_y: 1
 
@@ -434,7 +853,6 @@
         Button:
             text: "INSTALL UPDATES"
             background_color: 0.2, 0.8, 0.2, 1
-            # Only enabled if check found something
             disabled: not root.install_enabled or root.is_working
             on_release: root.install_updates()
             
@@ -454,17 +872,75 @@
 
 # --- SCREENS ---
 
+<SimControlWidget@BoxLayout>:
+    orientation: 'vertical'
+    size_hint_x: None
+    width: dp(150)  # Matches <TapWidget> width
+    spacing: 5
+    padding: 2
+    tap_index: 0
+    
+    Button:
+        text: "PINT (0.5L)"
+        background_color: 0.2, 0.6, 0.8, 1
+        font_size: '14sp'
+        bold: True
+        on_release: app.sim_pour_volume(root.tap_index, 0.5)
+
+    ToggleButton:
+        text: "CONTINUOUS"
+        background_color: (0, 0.8, 0, 1) if self.state == 'down' else (0.3, 0.3, 0.3, 1)
+        font_size: '14sp'
+        bold: True
+        on_state: app.sim_toggle_flow(root.tap_index, self.state == 'down')
+
 <DashboardScreen>:
+    kegerator_temp: ""
     BoxLayout:
         orientation: 'vertical'
-        HeaderLabel:
-            text: "KegLevel Lite"
         
-        # Centered Taps Layout
+        # --- HEADER (Unchanged) ---
+        FloatLayout:
+            size_hint_y: None
+            height: 50
+            canvas.before:
+                Color:
+                    rgba: 0.15, 0.15, 0.15, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            
+            Label:
+                text: "KegLevel Lite"
+                font_size: '24sp'
+                bold: True
+                color: 1, 0.75, 0, 1
+                pos_hint: {'center_x': 0.5, 'center_y': 0.5}
+            
+            # Temp Label + Hidden Trigger
+            Label:
+                text: root.kegerator_temp
+                font_size: '24sp'
+                bold: True
+                color: 0.2, 0.7, 1, 1
+                size_hint: None, None
+                size: self.texture_size
+                pos_hint: {'right': 0.98, 'center_y': 0.5}
+
+            Button:
+                text: ""
+                background_color: 0, 0, 0, 0
+                opacity: 0
+                size_hint: None, None
+                size: 150, 50
+                pos_hint: {'right': 1.0, 'center_y': 0.5}
+                on_release: root.on_temp_area_click()
+
+        # --- MAIN TAP DISPLAY ---
         AnchorLayout:
             anchor_x: 'center'
             anchor_y: 'center'
-            size_hint_y: 0.85
+            # size_hint_y will be managed dynamically by the Python code now
             BoxLayout:
                 id: tap_container
                 orientation: 'horizontal'
@@ -472,17 +948,55 @@
                 size_hint: None, 1
                 width: self.minimum_width
         
-        BoxLayout:
-            orientation: 'horizontal'
-            size_hint_y: 0.15
-            padding: 2
-            spacing: 2
-            NavButton:
-                text: "INVENTORY"
-                on_release: app.root.current = 'inventory'
-            NavButton:
-                text: "SETTINGS"
-                on_release: app.root.current = 'settings'
+        # --- DYNAMIC FOOTER (Nav vs Sim) ---
+        ScreenManager:
+            id: footer_manager
+            # Default to standard Nav height (0.15). 
+            # We will expand it to 0.25 via Python when Sim mode opens.
+            size_hint_y: 0.15  
+            transition: SlideTransition(direction='up')
+
+            # MODE 1: Normal Navigation
+            Screen:
+                name: 'nav_mode'
+                BoxLayout:
+                    orientation: 'horizontal'
+                    padding: 2
+                    spacing: 2
+                    NavButton:
+                        text: "INVENTORY"
+                        on_release: app.root.current = 'inventory'
+                    NavButton:
+                        text: "SETTINGS"
+                        on_release: app.root.current = 'settings'
+
+            # MODE 2: Simulation Controls
+            Screen:
+                name: 'sim_mode'
+                BoxLayout:
+                    orientation: 'vertical'
+                    canvas.before:
+                        Color:
+                            rgba: 0.1, 0.1, 0.1, 1
+                        Rectangle:
+                            pos: self.pos
+                            size: self.size
+                        Color:
+                            rgba: 1, 0.5, 0, 1 # Orange border top
+                        Line:
+                            points: [self.x, self.top, self.right, self.top]
+                            width: 2
+
+                    # Just the controls, centered
+                    AnchorLayout:
+                        anchor_x: 'center'
+                        anchor_y: 'center'
+                        BoxLayout:
+                            id: sim_container
+                            orientation: 'horizontal'
+                            spacing: 10
+                            size_hint: None, 1
+                            width: self.minimum_width
 
 <InventoryScreen>:
     BoxLayout:
@@ -494,24 +1008,19 @@
             height: 50
             padding: 5
             spacing: 5
-            ToggleButton:
+            
+            # USED CUSTOM CLASS (Consistent with Settings Screen)
+            TabButton:
                 text: "KEGS"
-                group: 'inv_tabs'
+                group: 'inv_tabs'  # <--- Override group to separate from Settings
                 state: 'down'
-                font_size: '18sp'
-                bold: True
-                background_normal: ''
-                background_color: (0.2, 0.2, 0.2, 1) if self.state == 'normal' else (1, 0.75, 0, 1)
-                color: (1, 1, 1, 1) if self.state == 'normal' else (0, 0, 0, 1)
+                font_size: '18sp'  # Optional: Overrides the class default (16sp) if you want them larger
                 on_release: root.show_kegs()
-            ToggleButton:
+
+            TabButton:
                 text: "BEVERAGES"
-                group: 'inv_tabs'
+                group: 'inv_tabs'  # <--- Override group
                 font_size: '18sp'
-                bold: True
-                background_normal: ''
-                background_color: (0.2, 0.2, 0.2, 1) if self.state == 'normal' else (1, 0.75, 0, 1)
-                color: (1, 1, 1, 1) if self.state == 'normal' else (0, 0, 0, 1)
                 on_release: root.show_bevs()
         ScreenManager:
             id: tab_manager
@@ -565,54 +1074,102 @@
                     size_hint_x: 0.6
                     font_size: '18sp'
                     on_text: root.beverage_name = self.text
+                    
+# --- ROW 1: MAX CAPACITY ---
             BoxLayout:
                 size_hint_y: None
                 height: 50
                 EditLabel:
                     text: "Max Capacity:"
+                    size_hint_x: 0.25
+                
+                FineTuneButton:
+                    text: "-"
+                    on_release: sli_max.value = max(sli_max.min, sli_max.value - sli_max.step)
+
                 Slider:
-                    min: 1
-                    max: 60
-                    step: 0.5
+                    id: sli_max
+                    min: root.vol_min   # <-- Dynamic
+                    max: root.vol_max   # <-- Dynamic
+                    step: root.vol_step # <-- Dynamic
                     value: root.max_volume_liters
-                    size_hint_x: 0.4
+                    size_hint_x: 0.6
                     on_value: root.set_max_volume_from_slider(self.value)
+
+                FineTuneButton:
+                    text: "+"
+                    on_release: sli_max.value = min(sli_max.max, sli_max.value + sli_max.step)
+
                 KegValueLabel:
                     text: root.ui_max_vol_text
+                    size_hint_x: 0.15
+
+            # --- ROW 2: TARE WEIGHT ---
             BoxLayout:
                 size_hint_y: None
                 height: 50
                 EditLabel:
-                    text: "Empty (Tare) Weight:"
+                    text: "Empty (Tare):"
+                    size_hint_x: 0.25
+
+                FineTuneButton:
+                    text: "-"
+                    on_release: sli_tare.value = max(sli_tare.min, sli_tare.value - sli_tare.step)
+
                 Slider:
-                    min: 0
-                    max: 20
-                    step: 0.1
+                    id: sli_tare
+                    min: root.tare_min   # <-- Dynamic
+                    max: root.tare_max   # <-- Dynamic
+                    step: root.tare_step # <-- Dynamic
                     value: root.tare_weight_kg
-                    size_hint_x: 0.4
+                    size_hint_x: 0.6
                     on_value: root.set_tare_from_slider(self.value)
+
+                FineTuneButton:
+                    text: "+"
+                    on_release: sli_tare.value = min(sli_tare.max, sli_tare.value + sli_tare.step)
+
                 KegValueLabel:
                     text: root.ui_tare_text
+                    size_hint_x: 0.15
+
+            # --- ROW 3: TOTAL WEIGHT ---
             BoxLayout:
                 size_hint_y: None
                 height: 50
                 EditLabel:
-                    text: "Current Total Weight:"
+                    text: "Total Weight:"
+                    size_hint_x: 0.25
+
+                FineTuneButton:
+                    text: "-"
+                    on_release: sli_total.value = max(sli_total.min, sli_total.value - sli_total.step)
+
                 Slider:
-                    min: 0
-                    max: 80
-                    step: 0.1
+                    id: sli_total
+                    min: root.total_min   # <-- Dynamic
+                    max: root.total_max   # <-- Dynamic
+                    step: root.total_step # <-- Dynamic
                     value: root.total_weight_kg
-                    size_hint_x: 0.4
+                    size_hint_x: 0.6
                     on_value: root.set_total_from_slider(self.value)
+
+                FineTuneButton:
+                    text: "+"
+                    on_release: sli_total.value = min(sli_total.max, sli_total.value + sli_total.step)
+
                 KegValueLabel:
                     text: root.ui_total_text
+                    size_hint_x: 0.15
+                    
             BoxLayout:
                 size_hint_y: None
                 height: 60
                 padding: (0, 10, 0, 0)
                 Label:
-                    text: "Liquid Volume:"
+                    # UPDATED: Added Markup for SG explanation
+                    text: "Liquid Volume:\n[size=14sp][color=#888888](calc @ 1.014 SG)[/color][/size]"
+                    markup: True 
                     font_size: '20sp'
                     bold: True
                     halign: 'right'
@@ -644,7 +1201,7 @@
                 font_size: '18sp'
                 bold: True
                 background_color: 0.2, 0.6, 0.2, 1
-                on_release: app.save_keg_edit()
+                on_release: root.save_keg_edit()
 
 <BeverageEditScreen>:
     BoxLayout:
@@ -744,18 +1301,18 @@
     BoxLayout:
         orientation: 'vertical'
         HeaderLabel:
-            text: "System Settings"
+            text: "Settings Management"
         BoxLayout:
             size_hint_y: None
             height: 50
             padding: 5
             spacing: 2
+            
+            # --- TAB BUTTONS REORDERED ---
+            
             TabButton:
-                text: "CALIBRATION"
-                state: 'down'
-                on_release: root.show_cal()
-            TabButton:
-                text: "CONFIGURATION"
+                text: "SYSTEM"
+                state: 'down'  # Default Selected
                 on_release: root.show_conf()
             TabButton:
                 text: "UPDATES"
@@ -763,12 +1320,17 @@
             TabButton:
                 text: "ABOUT"
                 on_release: root.show_about()
+            TabButton:
+                text: "CALIBRATION"
+                state: 'normal'
+                on_release: root.show_cal()
+
         ScreenManager:
             id: settings_manager
             transition: NoTransition()
-            Screen:
-                name: 'tab_cal'
-                SettingsCalibrationTab:
+            
+            # --- SCREENS REORDERED (First one is default) ---
+            
             Screen:
                 name: 'tab_conf'
                 SettingsConfigTab:
@@ -780,6 +1342,11 @@
             Screen:
                 name: 'tab_about'
                 SettingsAboutTab:
+            Screen:
+                name: 'tab_cal'
+                SettingsCalibrationTab:
+                    id: tab_cal_content  # <--- Added ID here
+
         BoxLayout:
             size_hint_y: None
             height: 60

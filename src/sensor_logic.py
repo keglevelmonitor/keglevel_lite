@@ -77,6 +77,11 @@ class SensorLogic:
         self._cal_start_pulse_count = 0
         self._cal_current_session_liters = 0.0 
 
+        # --- NEW: Auto-Detect Calibration State ---
+        self._auto_cal_mode = False
+        self._auto_cal_locked_tap = -1
+        self._auto_cal_session_pulses = 0
+
         self._load_initial_volumes()
 
     def _load_initial_volumes(self):
@@ -90,7 +95,9 @@ class SensorLogic:
                  dispensed = keg.get('current_dispensed_liters', 0.0)
                  starting_vol = keg.get('calculated_starting_volume_liters', 0.0)
                  self.keg_dispensed_liters[i] = dispensed
-                 self.last_known_remaining_liters[i] = max(0.0, starting_vol - dispensed)
+                 
+                 # CHANGED: Allow negative values (Removed max(0.0, ...))
+                 self.last_known_remaining_liters[i] = starting_vol - dispensed
              else:
                  self.keg_dispensed_liters[i] = 0.0
                  self.last_known_remaining_liters[i] = 0.0
@@ -102,13 +109,11 @@ class SensorLogic:
             self.sensor_thread = threading.Thread(target=self._sensor_loop, daemon=True)
             self.sensor_thread.start()
 
-    # --- ADDED THIS METHOD TO FIX THE CRASH ---
     def stop_monitoring(self):
         """Stops the monitoring loop gracefully."""
         self._running = False
         if self.sensor_thread:
             self.sensor_thread.join(timeout=1.0)
-    # ------------------------------------------
 
     def _setup_gpios(self):
         try: GPIO_LIB.cleanup()
@@ -117,6 +122,30 @@ class SensorLogic:
         for pin in self.sensor_pins:
             GPIO_LIB.setup(pin, GPIO_LIB.IN, pull_up_down=GPIO_LIB.PUD_DOWN) 
             GPIO_LIB.add_event_detect(pin, GPIO_LIB.RISING, callback=count_pulse, bouncetime=FLOW_DEBOUNCE_MS)
+
+    # --- NEW: Auto-Calibration Control Methods ---
+    def start_auto_calibration_mode(self):
+        """Enables the auto-detect calibration loop."""
+        self._auto_cal_mode = True
+        self._auto_cal_locked_tap = -1
+        self._auto_cal_session_pulses = 0
+        print("SensorLogic: Auto-Calibration Mode STARTED")
+
+    def stop_auto_calibration_mode(self):
+        """Disables calibration mode and resumes normal operation."""
+        self._auto_cal_mode = False
+        self._auto_cal_locked_tap = -1
+        self._auto_cal_session_pulses = 0
+        print("SensorLogic: Auto-Calibration Mode STOPPED")
+
+    def reset_auto_calibration_state(self):
+        """Resets the lock without exiting mode (for 'Reset/Cancel' button)."""
+        self._auto_cal_locked_tap = -1
+        self._auto_cal_session_pulses = 0
+        # Reset pulse tracking to avoid immediate re-trigger if flow is still trickling
+        for i in range(len(self.last_pulse_count)):
+            self.last_pulse_count[i] = global_pulse_counts[i]
+        print("SensorLogic: Auto-Calibration RESET")
 
     def _sensor_loop(self):
         global global_pulse_counts
@@ -136,6 +165,36 @@ class SensorLogic:
             
             k_factors = self.settings_manager.get_flow_calibration_factors()
             
+            # --- NEW: AUTO-CALIBRATION LOGIC BRANCH ---
+            if self._auto_cal_mode:
+                for i in range(displayed_taps):
+                    # Calculate raw delta pulses since last loop
+                    delta_p = global_pulse_counts[i] - self.last_pulse_count[i]
+                    self.last_pulse_count[i] = global_pulse_counts[i]
+                    last_check_time[i] = current_time
+
+                    # State 1: NO TAP LOCKED - Listen for activity
+                    if self._auto_cal_locked_tap == -1:
+                        if delta_p > 10: # Threshold to ignore noise
+                            self._auto_cal_locked_tap = i
+                            self._auto_cal_session_pulses = delta_p # Capture these initial pulses
+                            # Notify UI immediately
+                            if self.ui_callbacks.get("auto_cal_pulse_cb"):
+                                self.ui_callbacks["auto_cal_pulse_cb"](i, self._auto_cal_session_pulses)
+                    
+                    # State 2: TAP LOCKED - Accumulate pulses only for this tap
+                    elif i == self._auto_cal_locked_tap:
+                        if delta_p > 0:
+                            self._auto_cal_session_pulses += delta_p
+                            # Notify UI
+                            if self.ui_callbacks.get("auto_cal_pulse_cb"):
+                                self.ui_callbacks["auto_cal_pulse_cb"](i, self._auto_cal_session_pulses)
+                
+                # Sleep and continue (Skip normal pouring logic)
+                time.sleep(READING_INTERVAL_SECONDS)
+                continue
+            # ------------------------------------------
+
             # 1. Detect Activity
             if not self._is_calibrating and self.active_sensor_index == -1:
                 for i in range(displayed_taps):
@@ -150,7 +209,7 @@ class SensorLogic:
                 pulses = global_pulse_counts[i] - self.last_pulse_count[i]
                 is_active_target = (i == self.active_sensor_index)
                 
-                # --- CALIBRATION MODE ---
+                # --- CALIBRATION MODE (OLD MANUAL - Keeping for legacy safety if needed) ---
                 if self._is_calibrating and self._cal_target_tap == i:
                     if pulses > 0 and time_interval > 0:
                         lpm = (pulses / k_factors[i]) / (time_interval / 60.0)
@@ -176,7 +235,10 @@ class SensorLogic:
                             
                         # Update UI
                         remaining = self.last_known_remaining_liters[i] - liters
-                        self.last_known_remaining_liters[i] = max(0.0, remaining)
+                        
+                        # CHANGED: Allow negative values (Removed max(0.0, ...))
+                        self.last_known_remaining_liters[i] = remaining
+                        
                         self._update_ui(i, lpm, self.last_known_remaining_liters[i], "Pouring", self.current_pour_volume[i])
                         
                     elif self.tap_is_active[i] and pulses <= FLOW_PULSES_FOR_STOPPED:
@@ -237,3 +299,9 @@ class SensorLogic:
 
     def force_recalculation(self):
         self._load_initial_volumes()
+
+    def simulate_pulse_increment(self, tap_index, pulse_amount):
+        """Manually increments the global pulse counter for simulation."""
+        global global_pulse_counts
+        if 0 <= tap_index < len(global_pulse_counts):
+            global_pulse_counts[tap_index] += pulse_amount

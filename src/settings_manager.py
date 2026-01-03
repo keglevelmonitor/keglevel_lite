@@ -94,6 +94,8 @@ class SettingsManager:
             "error_reported_times": {"push": 0, "volume": 0, "temperature": 0}
         }
     
+    # settings_manager.py
+
     def _get_default_system_settings(self):
         return {
             "display_units": "metric", "displayed_taps": 5, "ds18b20_ambient_sensor": "unassigned", 
@@ -113,9 +115,21 @@ class SettingsManager:
             "setup_complete": False,
             "workflow_view_mode": "paged",
             "workflow_window_geometry": None,
-            # --- NEW: Pour Log Enable ---
-            "enable_pour_log": True
+            "enable_pour_log": True,
+            # --- NEW: Calibration Preference ---
+            "calibration_deduct_inventory": True
         }
+
+    # --- NEW METHODS for Calibration Preferences ---
+    def get_calibration_deduct_inventory(self):
+        return self.get_system_settings().get('calibration_deduct_inventory', True)
+
+    def save_calibration_deduct_inventory(self, enabled):
+        sys_set = self.settings.get('system_settings', self._get_default_system_settings())
+        sys_set['calibration_deduct_inventory'] = bool(enabled)
+        self.settings['system_settings'] = sys_set
+        self._save_all_settings()
+        print(f"SettingsManager: Calibration deduct inventory saved: {enabled}")
 
     # --- NEW METHODS for Pour Log ---
     def get_enable_pour_log(self):
