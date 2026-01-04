@@ -250,6 +250,22 @@ class SettingsScreen(Screen):
         self.mimic_mode_active = False
         self.set_active_tab('conf')
 
+    def on_leave(self, *args):
+        """Ensure we exit calibration mode when leaving the screen."""
+        self.set_calibration_mode(active=False)
+        self.mimic_mode_active = False
+        
+        # Force backend to stop calibration mode immediately
+        app = App.get_running_app()
+        if hasattr(app, 'sensor_logic') and app.sensor_logic:
+            # 1. Stop Auto-Detect Calibration (The likely culprit)
+            app.sensor_logic.stop_auto_calibration_mode()
+            
+            # 2. Safety: Stop Manual Calibration if active
+            if app.sensor_logic._is_calibrating:
+                app.sensor_logic._is_calibrating = False
+                app.sensor_logic._cal_target_tap = -1
+
     def handle_secret_click(self):
         """Handles clicks on the invisible top-right header button."""
         # 1. Only activate if we are on the Calibration Tab

@@ -9,7 +9,7 @@ Currently tested only on the Raspberry Pi 3B running Trixie and Bookworm. Should
 Open **Terminal** and run this command. Type carefully and use proper uppercase / lowercase because it matters:
 
 ```bash
-bash <(curl -sL bit.ly/keglevel)
+bash <(curl -sL bit.ly/install-keglevel-lite)
 ```
 
 Please **donate $$** if you use the app. See "Support the app" under the Settings & Info menu.
