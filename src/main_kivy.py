@@ -325,6 +325,10 @@ class SettingsScreen(Screen):
         # Special Handling: If entering Calibration, LOCK the others
         if tab_code == 'cal':
             self.set_calibration_mode(active=True)
+            
+        # Explicitly initialize UI for Config tab to load current settings
+        if tab_code == 'conf':
+            self.ids.tab_conf_content.init_ui()
 
     def set_calibration_mode(self, active):
         """

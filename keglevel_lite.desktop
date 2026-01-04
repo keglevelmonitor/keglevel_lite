@@ -6,6 +6,6 @@ Comment=Keg Level Lite Monitoring
 Path=/home/raspberrypi/keglevel_lite/src
 Exec=/home/raspberrypi/keglevel_lite/venv/bin/python /home/raspberrypi/keglevel_lite/src/main_kivy.py
 Icon=/home/raspberrypi/keglevel_lite/src/assets/beer-keg.png
-Terminal=true
+Terminal=false
 Autostart=false
 Categories=X-Other;
