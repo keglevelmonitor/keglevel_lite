@@ -588,13 +588,21 @@
     padding: 10
     spacing: 10
     
-    # --- ROW 1: TABS (Dynamic) ---
-    BoxLayout:
-        id: tap_buttons_container
+    # --- ROW 1: TABS (Dynamic & Centered) ---
+    # We use AnchorLayout to center the row, matching the Dashboard look
+    AnchorLayout:
+        anchor_x: 'center'
         size_hint_y: None
-        height: 60              # Increased height slightly for visibility
-        spacing: 10
-        # Buttons are added here by Python init_ui()
+        height: 24
+        
+        BoxLayout:
+            id: tap_buttons_container
+            orientation: 'horizontal'
+            spacing: 10
+            # These two lines are CRITICAL for centering:
+            size_hint: None, 1
+            width: self.minimum_width
+            # Buttons are added here by Python init_ui()
 
     # --- ROW 2: INSTRUCTIONS ---
     Label:
@@ -696,27 +704,56 @@
             orientation: 'vertical'
             spacing: 10
             
-            # K-Factor Display
+            # --- SPLIT K-FACTOR DISPLAY ROW ---
             BoxLayout:
-                padding: 10
-                canvas.before:
-                    Color:
-                        rgba: 0.15, 0.15, 0.15, 1
-                    Rectangle:
-                        pos: self.pos
-                        size: self.size
-                Label:
-                    text: "New K-Factor:"
-                    font_size: '18sp'
-                    halign: 'left'
-                    size_hint_x: 0.6
-                Label:
-                    text: root.calculated_k
-                    font_size: '24sp'
-                    bold: True
-                    color: 0, 1, 0, 1 # Green
-                    halign: 'right'
-                    size_hint_x: 0.4
+                spacing: 10
+                size_hint_y: None
+                height: 50 # Adjusted height for better fit
+
+                # BLOCK 1: NEW K-FACTOR (Green)
+                BoxLayout:
+                    padding: 5
+                    canvas.before:
+                        Color:
+                            rgba: 0.15, 0.15, 0.15, 1
+                        Rectangle:
+                            pos: self.pos
+                            size: self.size
+                    Label:
+                        text: "New K:"
+                        font_size: '16sp'
+                        halign: 'left'
+                        size_hint_x: 0.4
+                    Label:
+                        text: root.calculated_k
+                        font_size: '20sp'
+                        bold: True
+                        color: 0, 1, 0, 1 # Green
+                        halign: 'right'
+                        size_hint_x: 0.6
+
+                # BLOCK 2: CURRENT K-FACTOR (Amber/Yellow)
+                BoxLayout:
+                    padding: 5
+                    canvas.before:
+                        Color:
+                            rgba: 0.15, 0.15, 0.15, 1
+                        Rectangle:
+                            pos: self.pos
+                            size: self.size
+                    Label:
+                        text: "Current:"
+                        font_size: '16sp'
+                        color: 0.7, 0.7, 0.7, 1
+                        halign: 'left'
+                        size_hint_x: 0.4
+                    Label:
+                        text: root.current_k_display
+                        font_size: '20sp'
+                        bold: True
+                        color: 1, 0.75, 0, 1 # Amber
+                        halign: 'right'
+                        size_hint_x: 0.6
             
             # Deduct Checkbox
             BoxLayout:
@@ -731,27 +768,6 @@
                     font_size: '14sp'
                     text_size: self.size
                     valign: 'middle'
-
-    # --- ROW 5: ACTION BUTTONS ---
-    BoxLayout:
-        size_hint_y: None
-        height: 60
-        spacing: 20
-        
-        Button:
-            text: "RESET / CANCEL"
-            font_size: '16sp'
-            bold: True
-            background_color: 0.4, 0.4, 0.4, 1
-            on_release: root.reset_calibration()
-
-        Button:
-            text: "SAVE CALIBRATION"
-            font_size: '16sp'
-            bold: True
-            background_color: 0.2, 0.7, 0.2, 1 # Green
-            disabled: root.locked_tap_index == -1
-            on_release: root.save_calibration()
 
 <SettingsConfigTab>:
     orientation: 'vertical'
@@ -809,19 +825,13 @@
             id: spin_taps
             text: "4"
             values: ["1", "2", "3", "4", "5"]
-            size_hint_x: 0.7
+            size_hint_x: 0.35  # Reduced from 0.7 to 0.35 (Half width)
             font_size: '20sp'
             background_color: 0.25, 0.25, 0.25, 1
-    
-    # 3. SAVE
-    Button:
-        text: "Save System Settings & Restart Dashboard"
-        size_hint_y: None
-        height: 70
-        font_size: '20sp'
-        bold: True
-        background_color: 0.2, 0.6, 0.2, 1
-        on_release: root.save_config()
+        
+        # Spacer to maintain alignment (Fills the remaining 35%)
+        Label:
+            size_hint_x: 0.35
 
 <SettingsUpdatesTab>:
     orientation: 'vertical'
@@ -837,38 +847,129 @@
         font_size: '14sp'
         font_name: "RobotoMono-Regular"
         size_hint_y: 1
+    
+    # (Buttons removed from here, moved to Footer)
 
-    # ACTION BUTTONS
+<SettingsAboutTab@ScrollView>:
+    do_scroll_x: False
+    do_scroll_y: True
+    
     BoxLayout:
+        orientation: 'vertical'
         size_hint_y: None
-        height: 60
-        spacing: 20
+        height: self.minimum_height
+        padding: 20
+        spacing: 10
         
-        Button:
-            text: "CHECK UPDATES"
-            background_color: 0.2, 0.4, 0.8, 1
-            disabled: root.is_working
-            on_release: root.check_updates()
-
-        Button:
-            text: "INSTALL UPDATES"
-            background_color: 0.2, 0.8, 0.2, 1
-            disabled: not root.install_enabled or root.is_working
-            on_release: root.install_updates()
+        # --- TOP SECTION: LEFT TEXT / RIGHT IMAGE ---
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint_y: None
+            height: self.minimum_height
+            spacing: 10
             
-        Button:
-            text: "RESTART APP"
-            background_color: 1, 0.6, 0, 1
-            disabled: root.is_working
-            on_release: root.restart_app()
+            # Left Column: Brands AND Support Text
+            BoxLayout:
+                orientation: 'vertical'
+                size_hint_y: None
+                height: self.minimum_height
+                pos_hint: {'top': 1}
+                spacing: 20 # Clear separation between paragraphs
+                
+                # --- SECTION 1: BRANDS ---
+                BoxLayout:
+                    orientation: 'vertical'
+                    size_hint_y: None
+                    height: self.minimum_height
+                    spacing: 5
+                    
+                    Label:
+                        text: "KegLevel Brands"
+                        text_size: self.width, None
+                        size_hint_y: None
+                        height: self.texture_size[1]
+                        halign: 'left'
+                        font_size: '20sp'
+                        bold: True
+                        color: 1, 0.75, 0, 1
 
-<SettingsAboutTab@BoxLayout>:
-    orientation: 'vertical'
-    padding: 30
-    Label:
-        text: "KegLevel Lite v2.0\nCreated with Gemini"
-        font_size: '22sp'
-        color: 0.7, 0.7, 0.7, 1
+                    Label:
+                        text: "Keglevel Lite(c), KegLevel Monitor(c), KettleBrain(c), and FermVault(c) names, texts, UI/UX and program code are copyrighted. This material and all components of this program are protected by copyright law. Unauthorized use, duplication, or distribution is strictly prohibited."
+                        text_size: self.width, None
+                        size_hint_y: None
+                        height: self.texture_size[1]
+                        halign: 'left'
+                        font_size: '16sp'
+                        color: 0.9, 0.9, 0.9, 1
+
+                # --- SECTION 2: SUPPORT (Moved Here to fix gap) ---
+                BoxLayout:
+                    orientation: 'vertical'
+                    size_hint_y: None
+                    height: self.minimum_height
+                    spacing: 5
+
+                    Label:
+                        text: "Support This App"
+                        text_size: self.width, None
+                        size_hint_y: None
+                        height: self.texture_size[1]
+                        halign: 'left'
+                        font_size: '20sp'
+                        bold: True
+                        color: 1, 0.75, 0, 1
+
+                    Label:
+                        text: "This App took hundreds of hours to develop, test, and optimize. Please consider supporting this App with a donation so continuous improvements can be made. If you wish to receive customer support via email, please make a reasonable donation. Customer support requests without a donation may not be considered."
+                        text_size: self.width, None
+                        size_hint_y: None
+                        height: self.texture_size[1]
+                        halign: 'left'
+                        font_size: '16sp'
+                        color: 0.9, 0.9, 0.9, 1
+            
+            # Right Column: Image with 30px Padding
+            AnchorLayout:
+                anchor_x: 'right'
+                anchor_y: 'top'
+                size_hint_x: None
+                width: 200
+                size_hint_y: None
+                height: 200 
+                padding: [30, 30, 30, 30]
+                
+                Image:
+                    source: 'assets/support.gif'
+                    size_hint: None, None
+                    size: 140, 140
+                    allow_stretch: True
+                    keep_ratio: True
+
+        # --- BOTTOM SECTION: ACKNOWLEDGEMENTS ---
+        BoxLayout:
+            orientation: 'vertical'
+            size_hint_y: None
+            height: self.minimum_height
+            spacing: 5
+
+            Label:
+                text: "Acknowledgements"
+                text_size: self.width, None
+                size_hint_y: None
+                height: self.texture_size[1]
+                halign: 'left'
+                font_size: '20sp'
+                bold: True
+                color: 1, 0.75, 0, 1
+
+            Label:
+                text: "Icons created by Pixel Perfect - Flaticon\nhttps://www.flaticon.com/free-icons/update"
+                text_size: self.width, None
+                size_hint_y: None
+                height: self.texture_size[1]
+                halign: 'left'
+                font_size: '16sp'
+                color: 0.9, 0.9, 0.9, 1
 
 # --- SCREENS ---
 
@@ -894,6 +995,43 @@
         bold: True
         on_state: app.sim_toggle_flow(root.tap_index, self.state == 'down')
 
+<LoadingScreen@Screen>:
+    name: 'loading'
+    BoxLayout:
+        orientation: 'vertical'
+        canvas.before:
+            Color:
+                rgba: 0.1, 0.1, 0.1, 1
+            Rectangle:
+                pos: self.pos
+                size: self.size
+        
+        AnchorLayout:
+            anchor_x: 'center'
+            anchor_y: 'center'
+            BoxLayout:
+                orientation: 'vertical'
+                size_hint: None, None
+                size: self.minimum_size
+                spacing: 20
+                
+                Label:
+                    text: "KegLevel Lite"
+                    font_size: '40sp'
+                    bold: True
+                    color: 1, 0.75, 0, 1 # Amber
+                    size_hint: None, None
+                    size: self.texture_size
+                    pos_hint: {'center_x': 0.5}
+                
+                Label:
+                    text: "Initializing System..."
+                    font_size: '20sp'
+                    color: 0.7, 0.7, 0.7, 1
+                    size_hint: None, None
+                    size: self.texture_size
+                    pos_hint: {'center_x': 0.5}
+                    
 <DashboardScreen>:
     kegerator_temp: ""
     BoxLayout:
@@ -940,7 +1078,6 @@
         AnchorLayout:
             anchor_x: 'center'
             anchor_y: 'center'
-            # size_hint_y will be managed dynamically by the Python code now
             BoxLayout:
                 id: tap_container
                 orientation: 'horizontal'
@@ -951,9 +1088,9 @@
         # --- DYNAMIC FOOTER (Nav vs Sim) ---
         ScreenManager:
             id: footer_manager
-            # Default to standard Nav height (0.15). 
-            # We will expand it to 0.25 via Python when Sim mode opens.
-            size_hint_y: 0.15  
+            # CHANGED: Fixed height to match Settings/Inventory
+            size_hint_y: None
+            height: 60  
             transition: SlideTransition(direction='up')
 
             # MODE 1: Normal Navigation
@@ -961,13 +1098,15 @@
                 name: 'nav_mode'
                 BoxLayout:
                     orientation: 'horizontal'
-                    padding: 2
-                    spacing: 2
+                    padding: 5 # Increased from 2 to match others
+                    spacing: 10 # Increased from 2 to match others
                     NavButton:
                         text: "INVENTORY"
+                        font_size: '16sp' # Standardized
                         on_release: app.root.current = 'inventory'
                     NavButton:
                         text: "SETTINGS"
+                        font_size: '16sp' # Standardized
                         on_release: app.root.current = 'settings'
 
             # MODE 2: Simulation Controls
@@ -1012,14 +1151,14 @@
             # USED CUSTOM CLASS (Consistent with Settings Screen)
             TabButton:
                 text: "KEGS"
-                group: 'inv_tabs'  # <--- Override group to separate from Settings
+                group: 'inv_tabs'
                 state: 'down'
-                font_size: '18sp'  # Optional: Overrides the class default (16sp) if you want them larger
+                font_size: '18sp'
                 on_release: root.show_kegs()
 
             TabButton:
                 text: "BEVERAGES"
-                group: 'inv_tabs'  # <--- Override group
+                group: 'inv_tabs'
                 font_size: '18sp'
                 on_release: root.show_bevs()
         ScreenManager:
@@ -1038,16 +1177,23 @@
             height: 60
             padding: 5
             spacing: 10
+            
+            # --- UPDATED BUTTON ---
             Button:
-                text: "Back to Dashboard"
-                font_size: '18sp'
+                text: "BACK TO DASHBOARD"
+                font_size: '16sp'
+                bold: True
+                background_normal: ''              # Flat style
+                background_color: 0.4, 0.4, 0.4, 1 # Dark Grey
                 size_hint_x: 0.3
                 on_release: app.root.current = 'dashboard'
+            
             Label:
                 size_hint_x: 0.4
+            
             Button:
                 text: "+ ADD NEW"
-                font_size: '18sp'
+                font_size: '16sp'
                 bold: True
                 size_hint_x: 0.3
                 background_color: 0, 0.5, 0, 1
@@ -1300,36 +1446,71 @@
 <SettingsScreen>:
     BoxLayout:
         orientation: 'vertical'
-        HeaderLabel:
-            text: "Settings Management"
+        
+        # --- HEADER WITH SECRET BUTTON ---
+        FloatLayout:
+            size_hint_y: None
+            height: 50
+            canvas.before:
+                Color:
+                    rgba: 0.15, 0.15, 0.15, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            
+            # The Title
+            Label:
+                text: "Settings Management"
+                font_size: '24sp'
+                bold: True
+                color: 1, 0.75, 0, 1
+                pos_hint: {'center_x': 0.5, 'center_y': 0.5}
+
+            # The Invisible "Secret Knock" Button (Top Right)
+            Button:
+                text: ""
+                background_color: 0, 0, 0, 0 # Transparent
+                size_hint: None, 1           # Full height of header
+                width: 120                   # Wide enough to hit easily
+                pos_hint: {'right': 1, 'y': 0}
+                on_release: root.handle_secret_click()
+
+        # --- TAB HEADER ---
         BoxLayout:
             size_hint_y: None
             height: 50
             padding: 5
             spacing: 2
             
-            # --- TAB BUTTONS REORDERED ---
-            
             TabButton:
+                id: btn_sys
                 text: "SYSTEM"
-                state: 'down'  # Default Selected
-                on_release: root.show_conf()
+                group: 'settings_tabs'
+                allow_no_selection: False
+                on_release: root.set_active_tab('conf')
             TabButton:
+                id: btn_upd
                 text: "UPDATES"
-                on_release: root.show_upd()
+                group: 'settings_tabs'
+                allow_no_selection: False
+                on_release: root.set_active_tab('upd')
             TabButton:
+                id: btn_about
                 text: "ABOUT"
-                on_release: root.show_about()
+                group: 'settings_tabs'
+                allow_no_selection: False
+                on_release: root.set_active_tab('about')
             TabButton:
+                id: btn_cal
                 text: "CALIBRATION"
-                state: 'normal'
-                on_release: root.show_cal()
+                group: 'settings_tabs'
+                allow_no_selection: False
+                on_release: root.set_active_tab('cal')
 
+        # --- CONTENT AREA ---
         ScreenManager:
             id: settings_manager
             transition: NoTransition()
-            
-            # --- SCREENS REORDERED (First one is default) ---
             
             Screen:
                 name: 'tab_conf'
@@ -1345,15 +1526,139 @@
             Screen:
                 name: 'tab_cal'
                 SettingsCalibrationTab:
-                    id: tab_cal_content  # <--- Added ID here
+                    id: tab_cal_content
 
-        BoxLayout:
+        # --- DYNAMIC FOOTER AREA ---
+        ScreenManager:
+            id: footer_manager
             size_hint_y: None
             height: 60
-            padding: 5
-            spacing: 10
-            Button:
-                text: "Back to Dashboard"
-                font_size: '18sp'
-                size_hint_x: 1
-                on_release: app.root.current = 'dashboard'
+            transition: NoTransition()
+
+            # 1. SYSTEM FOOTER
+            Screen:
+                name: 'footer_conf'
+                BoxLayout:
+                    padding: 5
+                    spacing: 10
+                    Button:
+                        text: "CANCEL / EXIT"
+                        font_size: '16sp'
+                        bold: True
+                        background_normal: '' # MATCHING FLAT STYLE
+                        background_color: 0.4, 0.4, 0.4, 1
+                        on_release: app.root.current = 'dashboard'
+                    Label:
+                        text: "" 
+                    Label:
+                        text: "" 
+                    Button:
+                        text: "SAVE SETTINGS"
+                        font_size: '16sp'
+                        bold: True
+                        background_color: 0.2, 0.6, 0.2, 1
+                        on_release: root.ids.tab_conf_content.save_config()
+
+            # 2. UPDATES FOOTER
+            Screen:
+                name: 'footer_upd'
+                BoxLayout:
+                    padding: 5
+                    spacing: 10
+                    Button:
+                        text: "CANCEL / EXIT"
+                        font_size: '16sp'
+                        bold: True
+                        background_normal: '' # MATCHING FLAT STYLE
+                        background_color: 0.4, 0.4, 0.4, 1
+                        on_release: app.root.current = 'dashboard'
+                    Button:
+                        text: "CHECK"
+                        font_size: '16sp'
+                        bold: True
+                        background_color: 0.2, 0.4, 0.8, 1
+                        disabled: root.ids.tab_upd_content.is_working
+                        on_release: root.ids.tab_upd_content.check_updates()
+                    Button:
+                        text: "INSTALL"
+                        font_size: '16sp'
+                        bold: True
+                        background_color: 0.2, 0.6, 0.2, 1
+                        disabled: not root.ids.tab_upd_content.install_enabled or root.ids.tab_upd_content.is_working
+                        on_release: root.ids.tab_upd_content.install_updates()
+                    Button:
+                        text: "RESTART"
+                        font_size: '16sp'
+                        bold: True
+                        background_color: 1, 0.6, 0, 1
+                        disabled: root.ids.tab_upd_content.is_working
+                        on_release: root.ids.tab_upd_content.restart_app()
+
+            # 3. ABOUT FOOTER
+            Screen:
+                name: 'footer_about'
+                BoxLayout:
+                    padding: 5
+                    spacing: 10
+                    Button:
+                        text: "CANCEL / EXIT"
+                        font_size: '16sp'
+                        bold: True
+                        background_normal: '' # MATCHING FLAT STYLE
+                        background_color: 0.4, 0.4, 0.4, 1
+                        on_release: app.root.current = 'dashboard'
+                    Label: 
+                    Label: 
+                    Label: 
+
+            # 4. CALIBRATION FOOTER
+            Screen:
+                name: 'footer_cal'
+                BoxLayout:
+                    padding: 5
+                    spacing: 10
+                    Button:
+                        text: "CANCEL / EXIT"
+                        font_size: '16sp'
+                        bold: True
+                        background_normal: '' # MATCHING FLAT STYLE
+                        background_color: 0.4, 0.4, 0.4, 1
+                        on_release: 
+                            root.ids.tab_cal_content.reset_calibration()
+                            root.set_calibration_mode(False) 
+                            app.root.current = 'dashboard'
+                    
+                    Button:
+                        text: "SET TO DEFAULT"
+                        font_size: '16sp'
+                        bold: True
+                        background_color: 0.2, 0.4, 0.8, 1
+                        disabled: root.ids.tab_cal_content.locked_tap_index == -1
+                        on_release: root.ids.tab_cal_content.set_to_default_k_factor()
+
+                    Button:
+                        text: "RESET PULSES"
+                        font_size: '16sp'
+                        bold: True
+                        background_color: 0.2, 0.4, 0.8, 1
+                        on_release: root.ids.tab_cal_content.reset_calibration()
+
+                    Button:
+                        text: "SAVE CALIBRATION"
+                        font_size: '16sp'
+                        bold: True
+                        background_color: 0.2, 0.6, 0.2, 1
+                        disabled: root.ids.tab_cal_content.locked_tap_index == -1
+                        on_release: root.ids.tab_cal_content.save_calibration()
+
+            # 5. MIMIC POUR FOOTER (Hidden until triggered)
+            Screen:
+                name: 'footer_cal_mimic'
+                AnchorLayout:
+                    anchor_x: 'center'
+                    BoxLayout:
+                        id: mimic_container
+                        orientation: 'horizontal'
+                        spacing: 10
+                        size_hint: None, 1
+                        width: self.minimum_width

@@ -235,16 +235,121 @@ class InventoryScreen(Screen):
         else: app.open_beverage_edit(None)
 
 class SettingsScreen(Screen):
-    def show_cal(self):
-        self.ids.settings_manager.current = 'tab_cal'
-    def show_conf(self):
-        self.ids.settings_manager.current = 'tab_conf'
-        self.ids.tab_conf_content.init_ui()
-    def show_upd(self):
-        self.ids.settings_manager.current = 'tab_upd'
-    def show_about(self):
-        self.ids.settings_manager.current = 'tab_about'
+    """
+    Manages the Settings Tabs and the corresponding dynamic Footer.
+    """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.last_click_time = 0
+        self.click_count = 0
+        self.mimic_mode_active = False
 
+    def on_pre_enter(self, *args):
+        """Always reset to the System tab when opening Settings."""
+        self.set_calibration_mode(active=False)
+        self.mimic_mode_active = False
+        self.set_active_tab('conf')
+
+    def handle_secret_click(self):
+        """Handles clicks on the invisible top-right header button."""
+        # 1. Only activate if we are on the Calibration Tab
+        if self.ids.settings_manager.current != 'tab_cal':
+            return
+
+        # 2. Check Timing (5 Rapid Clicks)
+        import time
+        current_time = time.time()
+        
+        # 500ms threshold between clicks
+        if current_time - self.last_click_time < 0.5: 
+            self.click_count += 1
+        else:
+            self.click_count = 1
+        
+        self.last_click_time = current_time
+
+        if self.click_count >= 5:
+            self.click_count = 0
+            self.toggle_mimic_mode()
+
+    def set_active_tab(self, tab_code):
+        """
+        Manually handles tab switching.
+        tab_code: 'conf', 'upd', 'about', 'cal'
+        """
+        # If we are locked in calibration mode, ignore other clicks
+        # UNLESS the user is clicking 'cal' again (which does nothing now, handled by header)
+        if self.ids.btn_sys.disabled and tab_code != 'cal':
+            return
+
+        # Map codes to UI IDs and Screen Names
+        tab_map = {
+            'conf':  ('btn_sys',   'tab_conf',   'footer_conf'),
+            'upd':   ('btn_upd',   'tab_upd',    'footer_upd'),
+            'about': ('btn_about', 'tab_about',  'footer_about'),
+            'cal':   ('btn_cal',   'tab_cal',    'footer_cal')
+        }
+
+        if tab_code not in tab_map: return
+
+        target_btn, target_content, target_footer = tab_map[tab_code]
+
+        # Switch Screens
+        self.ids.settings_manager.current = target_content
+        
+        # Only switch footer if we are NOT in mimic mode (or if we are leaving cal)
+        if not self.mimic_mode_active or tab_code != 'cal':
+            self.ids.footer_manager.current = target_footer
+
+        # Update Buttons state
+        for code, (btn_id, _, _) in tab_map.items():
+            if btn_id in self.ids:
+                self.ids[btn_id].state = 'down' if code == tab_code else 'normal'
+
+        # Special Handling: If entering Calibration, LOCK the others
+        if tab_code == 'cal':
+            self.set_calibration_mode(active=True)
+
+    def set_calibration_mode(self, active):
+        """
+        active=True: Disables navigation tabs (Modal Mode).
+        active=False: Re-enables navigation tabs.
+        """
+        self.ids.btn_sys.disabled = active
+        self.ids.btn_upd.disabled = active
+        self.ids.btn_about.disabled = active
+        
+        # If deactivating, ensure mimic mode is off
+        if not active:
+            self.mimic_mode_active = False
+
+    def toggle_mimic_mode(self):
+        """Switches the footer between Standard Calibration and Mimic Pour."""
+        self.mimic_mode_active = not self.mimic_mode_active
+        
+        if self.mimic_mode_active:
+            self.populate_mimic_footer()
+            self.ids.footer_manager.current = 'footer_cal_mimic'
+        else:
+            self.ids.footer_manager.current = 'footer_cal'
+
+    def populate_mimic_footer(self):
+        """Dynamically fills the mimic footer with SimControlWidgets (Pint/Continuous)."""
+        container = self.ids.mimic_container
+        container.clear_widgets()
+        
+        app = App.get_running_app()
+        num_taps = app.settings_manager.get_displayed_taps()
+        
+        # We reuse the existing SimControlWidget defined in KV
+        from kivy.factory import Factory
+        
+        for i in range(num_taps):
+            # Create the widget that already has "Pint" and "Continuous" stacked
+            widget = Factory.SimControlWidget()
+            widget.tap_index = i
+            container.add_widget(widget)
+                    
 class SimulationPopup(Popup):
     def on_open(self):
         app = App.get_running_app()
@@ -501,33 +606,27 @@ class SettingsCalibrationTab(BoxLayout):
     current_pulses = NumericProperty(0)
     measured_volume = NumericProperty(0.0)
     calculated_k = StringProperty("----")
+    # --- NEW PROPERTY ---
+    current_k_display = StringProperty("----")
+    
     instruction_text = StringProperty("Open any tap to begin calibration.")
     deduct_inventory = BooleanProperty(True)
 
     def on_kv_post(self, base_widget):
-        """Called once KV loading is complete. Safe to access ids here."""
         self.init_ui()
 
     def on_parent(self, widget, parent):
-        """Bind to the parent Screen's lifecycle events."""
         if parent:
-            # We are inside a Screen. Bind to its events to know when we are visible.
             parent.bind(on_enter=self.on_tab_enter)
             parent.bind(on_leave=self.on_tab_leave)
 
     def on_tab_enter(self, *args):
-        """Called when the user switches TO this tab."""
-        # Refresh UI settings in case units/taps changed
         self.init_ui()
-        
-        # Start Sensor Logic
         app = App.get_running_app()
         if hasattr(app, 'sensor_logic') and app.sensor_logic:
             app.sensor_logic.start_auto_calibration_mode()
 
     def on_tab_leave(self, *args):
-        """Called when the user switches AWAY from this tab."""
-        # Stop Sensor Logic
         app = App.get_running_app()
         if hasattr(app, 'sensor_logic') and app.sensor_logic:
             app.sensor_logic.stop_auto_calibration_mode()
@@ -535,6 +634,7 @@ class SettingsCalibrationTab(BoxLayout):
     def init_ui(self):
         """Reset UI state and load preferences."""
         app = App.get_running_app()
+        from kivy.metrics import dp
         
         # 1. Units
         units = app.settings_manager.get_display_units()
@@ -553,18 +653,17 @@ class SettingsCalibrationTab(BoxLayout):
         
         self.tap_buttons = []
         for i in range(num_taps):
-            from kivy.uix.togglebutton import ToggleButton
-            btn = ToggleButton(
+            from kivy.uix.button import Button
+            btn = Button(
                 text=f"TAP {i+1}", 
-                group='cal_taps', 
-                state='normal',
-                disabled=True,                   # Start disabled
                 font_size='18sp',
                 bold=True,
-                background_disabled_normal='',   # REQUIRED: Removes default dark texture
-                background_normal='',            # REQUIRED: Removes default texture
-                disabled_color=(1, 1, 1, 1),     # REQUIRED: Keeps text WHITE when disabled
-                background_color=(0.3, 0.3, 0.3, 1) # Lighter Grey (Visible)
+                background_normal='',            
+                background_down='',              
+                background_color=(0.2, 0.2, 0.2, 1), # Dark Grey
+                color=(0.5, 0.5, 0.5, 1),        # Dimmed Text
+                size_hint_x=None,
+                width=dp(150)
             )
             container.add_widget(btn)
             self.tap_buttons.append(btn)
@@ -591,30 +690,30 @@ class SettingsCalibrationTab(BoxLayout):
             self.instruction_text = f"Tap {tap_index+1} Detected! Close tap when done, then adjust volume."
             self._update_tap_buttons(tap_index)
             
+            # --- NEW: Fetch Current K-Factor for Comparison ---
+            app = App.get_running_app()
+            factors = app.settings_manager.get_flow_calibration_factors()
+            if 0 <= tap_index < len(factors):
+                self.current_k_display = f"{factors[tap_index]:.2f}"
+            # --------------------------------------------------
+            
         # 2. Update Data
         if self.locked_tap_index == tap_index:
             self.current_pulses = pulses
             self.recalculate_k()
 
     def _update_tap_buttons(self, active_index):
-        """Highlights the active tap, dims others."""
         for i, btn in enumerate(self.tap_buttons):
             if i == active_index:
-                btn.state = 'down'
-                btn.disabled = False
-                btn.background_color = (0.2, 0.6, 1, 1) # Blue (Active)
+                btn.background_color = (0.2, 0.6, 1, 1) # Blue
                 btn.color = (1, 1, 1, 1)
             else:
-                btn.state = 'normal'
-                btn.disabled = True
-                btn.background_color = (0.3, 0.3, 0.3, 1) # Grey (Idle)
-                btn.color = (1, 1, 1, 1) # Keep text white
+                btn.background_color = (0.2, 0.2, 0.2, 1) # Dark Grey
+                btn.color = (0.5, 0.5, 0.5, 1)
 
     def adjust_volume(self, delta):
-        """Handles +/- buttons."""
         slider = self.ids.vol_slider
         new_val = slider.value + delta
-        # Clamp
         new_val = max(slider.min, min(slider.max, new_val))
         slider.value = new_val
 
@@ -622,16 +721,15 @@ class SettingsCalibrationTab(BoxLayout):
         self.recalculate_k()
 
     def recalculate_k(self):
-        """Math: K = Pulses / Liters."""
         if self.measured_volume <= 0 or self.current_pulses <= 0:
             self.calculated_k = "----"
             return
             
         vol_liters = 0.0
         if self.is_metric:
-            vol_liters = self.measured_volume / 1000.0 # mL -> L
+            vol_liters = self.measured_volume / 1000.0
         else:
-            vol_liters = self.measured_volume * 0.0295735 # oz -> L
+            vol_liters = self.measured_volume * 0.0295735
             
         if vol_liters > 0:
             k = self.current_pulses / vol_liters
@@ -642,7 +740,7 @@ class SettingsCalibrationTab(BoxLayout):
         try:
             new_k = float(self.calculated_k)
         except ValueError:
-            return # Invalid K
+            return
 
         app = App.get_running_app()
         
@@ -659,12 +757,24 @@ class SettingsCalibrationTab(BoxLayout):
             vol_liters = 0.0
             if self.is_metric: vol_liters = self.measured_volume / 1000.0
             else: vol_liters = self.measured_volume * 0.0295735
-            
             if app.sensor_logic:
                 app.sensor_logic.deduct_volume_from_keg(self.locked_tap_index, vol_liters)
                 
         # 4. Feedback & Reset
         self.instruction_text = f"Saved! Tap {self.locked_tap_index+1} calibrated. Ready for next tap."
+        self.reset_form_soft()
+
+    def set_to_default_k_factor(self):
+        """Restores default K-factor (5100) for the active tap."""
+        if self.locked_tap_index == -1: return
+        from sensor_logic import DEFAULT_K_FACTOR
+        
+        app = App.get_running_app()
+        factors = app.settings_manager.get_flow_calibration_factors()
+        factors[self.locked_tap_index] = DEFAULT_K_FACTOR
+        app.settings_manager.save_flow_calibration_factors(factors)
+        
+        self.instruction_text = f"Tap {self.locked_tap_index+1} reset to default K-Factor ({DEFAULT_K_FACTOR})."
         self.reset_form_soft()
 
     def reset_calibration(self):
@@ -681,13 +791,14 @@ class SettingsCalibrationTab(BoxLayout):
         self.locked_tap_index = -1
         self.current_pulses = 0
         self.calculated_k = "----"
+        # --- NEW: Reset Display ---
+        self.current_k_display = "----"
         
         # Reset Buttons
         if hasattr(self, 'tap_buttons'):
             for btn in self.tap_buttons:
-                btn.state = 'normal'
-                btn.disabled = True
                 btn.background_color = (0.2, 0.2, 0.2, 1)
+                btn.color = (0.5, 0.5, 0.5, 1)
 
     def reset_form(self):
         """Full reset including volume defaults."""
@@ -695,8 +806,9 @@ class SettingsCalibrationTab(BoxLayout):
         self.instruction_text = "Open any tap to begin calibration."
 
 class DashboardScreen(Screen):
-    kegerator_temp = StringProperty("")
+    kegerator_temp = StringProperty("--.- °F")
     
+    # --- Existing 5-Click Logic (PRESERVED) ---
     _click_count = 0
     _reset_event = None
 
@@ -708,32 +820,30 @@ class DashboardScreen(Screen):
         
         if self._click_count >= 5:
             self._reset_clicks(0)
-            app = App.get_running_app()
             
-            # TOGGLE LOGIC:
+            # Toggle based on current state
             if self.ids.footer_manager.current == 'sim_mode':
-                app.close_simulation_dashboard()
+                self.toggle_sim_footer(False)
             else:
-                app.open_simulation_dashboard()
+                self.toggle_sim_footer(True)
 
     def _reset_clicks(self, dt):
         self._click_count = 0
 
+    # --- Updated Footer Logic (FIXED: No Height Change) ---
     def toggle_sim_footer(self, show_sim):
-        """Switches footer mode and adjusts height dynamically."""
+        """Switches footer mode without changing height."""
         sm = self.ids.footer_manager
         
         if show_sim:
-            # 1. Expand footer to fit stacked buttons
-            sm.size_hint_y = 0.25 
-            # 2. Slide Up
+            # 1. Slide Up to Sim Mode
             sm.transition.direction = 'up'
             sm.current = 'sim_mode'
+            
+            # Populate controls
             self._populate_sim_controls()
         else:
-            # 1. Shrink footer back to standard Nav bar height
-            sm.size_hint_y = 0.15
-            # 2. Slide Down
+            # 1. Slide Down to Nav Mode
             sm.transition.direction = 'down'
             sm.current = 'nav_mode'
 
@@ -743,8 +853,11 @@ class DashboardScreen(Screen):
         container = self.ids.sim_container
         container.clear_widgets()
         
-        for i in range(app.num_sensors):
-            from kivy.factory import Factory
+        from kivy.factory import Factory
+        # Use get_displayed_taps() to ensure we match the visible configuration
+        num_taps = app.settings_manager.get_displayed_taps()
+        
+        for i in range(num_taps):
             widget = Factory.SimControlWidget()
             widget.tap_index = i
             container.add_widget(widget)
@@ -758,22 +871,45 @@ class KegLevelApp(App):
     
     def build(self):
         self.title = "KegLevel Lite"
+        Builder.load_file('keglevel_ui.kv')
+        
+        self.sm = ScreenManager(transition=SlideTransition())
+        
+        # Create a temporary blank screen to satisfy Kivy while we load.
+        # The Splash Screen (Tkinter) is "always on top", so it will hide this.
+        self.temp_screen = Screen(name='temp_loading')
+        self.sm.add_widget(self.temp_screen)
+        
+        return self.sm
+
+    def on_start(self):
+        # Schedule initialization.
+        # Note: We DO NOT kill the splash screen here anymore.
+        Clock.schedule_once(self.finalize_startup, 0.1)
+
+    def finalize_startup(self, dt):
+        """
+        Performs heavy initialization in the correct order.
+        """
+        # 1. Initialize Data Manager
         self.settings_manager = SettingsManager(len(FLOW_SENSOR_PINS))
         self.num_sensors = self.settings_manager.get_displayed_taps()
-        Builder.load_file('keglevel_ui.kv')
-        self.sm = ScreenManager(transition=SlideTransition())
+        
+        # 2. Instantiate Screens
         self.dashboard_screen = DashboardScreen(name='dashboard')
         self.inventory_screen = InventoryScreen(name='inventory')
         self.keg_edit_screen = KegEditScreen(name='keg_edit')
         self.bev_edit_screen = BeverageEditScreen(name='bev_edit')
         self.settings_screen = SettingsScreen(name='settings')
         
+        # 3. Add Screens to Manager
         self.sm.add_widget(self.dashboard_screen)
         self.sm.add_widget(self.inventory_screen)
         self.sm.add_widget(self.keg_edit_screen)
         self.sm.add_widget(self.bev_edit_screen)
         self.sm.add_widget(self.settings_screen)
         
+        # 4. Populate Dashboard Widgets
         self.tap_widgets = []
         tap_container = self.dashboard_screen.ids.tap_container
         tap_container.clear_widgets()
@@ -782,38 +918,51 @@ class KegLevelApp(App):
             widget.tap_index = i
             tap_container.add_widget(widget)
             self.tap_widgets.append(widget)
-        return self.sm
-
-    def on_start(self):
-        # 1. Standard Dashboard Callback (Bridge to UI Thread)
+            
+        # 5. Define Logic Callbacks
         def bridge_callback(idx, rate, rem, status, pour_vol):
             Clock.schedule_once(lambda dt: self.update_tap_ui(idx, rate, rem, status, pour_vol))
         
-        # 2. NEW: Calibration Callback (Bridge to UI Thread)
         def cal_bridge_callback(idx, pulses):
-             # Find the active screen instance using the ID we added to the KV file
              cal_tab = self.settings_screen.ids.get('tab_cal_content') 
              if cal_tab:
                  Clock.schedule_once(lambda dt: cal_tab.update_pulse_data(idx, pulses))
 
-        # 3. Define Callback Dictionary
         callbacks = {
             "update_sensor_data_cb": bridge_callback,
-            "update_cal_data_cb": lambda x, y: None, # Old manual cal callback (unused now)
-            "auto_cal_pulse_cb": cal_bridge_callback # The new Auto-Detect hook
+            "update_cal_data_cb": lambda x, y: None, 
+            "auto_cal_pulse_cb": cal_bridge_callback 
         }
 
-        # 4. Initialize Sensor Logic
+        # 6. Initialize Sensor Logic
         self.sensor_logic = SensorLogic(self.num_sensors, callbacks, self.settings_manager)
         
-        # 5. Refresh UI Data
+        # 7. Refresh UI & Start Hardware
         self.refresh_dashboard_metadata()
         self.refresh_keg_list()
         self.refresh_beverage_list()
-        
-        # 6. Start Monitoring
         self.sensor_logic.start_monitoring()
         self.init_temp_sensor()
+        
+        # 8. Switch to Dashboard
+        # The Dashboard is now "Active" logically, but not yet rendered.
+        self.sm.current = 'dashboard'
+        
+        # 9. Schedule Splash Dismissal (DELPAYED)
+        # We wait 0.5 seconds to allow the Main Thread to finish this function,
+        # return to the Kivy Loop, and render the Dashboard frame *under* the splash window.
+        Clock.schedule_once(self.dismiss_splash, 0.5)
+
+    def dismiss_splash(self, dt):
+        """
+        Kills the splash screen after the UI is fully rendered.
+        """
+        if hasattr(self, 'splash_queue'):
+            self.splash_queue.put("STOP")
+            
+        # Remove the temp screen to free up memory
+        if hasattr(self, 'temp_screen') and self.temp_screen in self.sm.screens:
+            self.sm.remove_widget(self.temp_screen)
 
     def init_temp_sensor(self):
         """Finds 1-wire temp sensor and starts update loop."""
@@ -1359,5 +1508,76 @@ class KegLevelApp(App):
         if hasattr(self, 'sensor_logic') and self.sensor_logic:
             self.sensor_logic.cleanup_gpio()
 
+def run_splash_screen(queue):
+    """
+    Runs a standalone Tkinter loading dialog in a separate process.
+    This appears immediately, independent of Kivy's loading time.
+    """
+    import tkinter as tk
+    
+    try:
+        root = tk.Tk()
+        # Remove window decorations (frameless)
+        root.overrideredirect(True)
+        # Keep on top of the launching Kivy window
+        root.attributes('-topmost', True)
+        
+        # Calculate center position
+        width = 300
+        height = 80
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        x = (screen_width // 2) - (width // 2)
+        y = (screen_height // 2) - (height // 2)
+        
+        root.geometry(f'{width}x{height}+{x}+{y}')
+        root.configure(bg='#222222')
+        
+        # Add a simple styled frame
+        frame = tk.Frame(root, bg='#222222', highlightbackground='#FFC107', highlightthickness=2)
+        frame.pack(fill='both', expand=True)
+        
+        # Add Text (UPDATED)
+        lbl = tk.Label(frame, text="KegLevel Lite loading...", font=("Arial", 16, "bold"), fg="#FFC107", bg="#222222")
+        lbl.pack(expand=True)
+        
+        # Force a draw immediately
+        root.update()
+        
+        # Check for kill signal every 100ms
+        def check_kill():
+            if not queue.empty():
+                root.destroy()
+            else:
+                root.after(100, check_kill)
+                
+        root.after(100, check_kill)
+        root.mainloop()
+    except Exception as e:
+        print(f"Splash screen error: {e}")
+
 if __name__ == '__main__':
-    KegLevelApp().run()
+    import multiprocessing
+    
+    # 1. Start the Splash Screen immediately in a separate process
+    # We use multiprocessing so it doesn't block the main thread imports
+    splash_queue = multiprocessing.Queue()
+    splash_process = multiprocessing.Process(target=run_splash_screen, args=(splash_queue,))
+    splash_process.start()
+    
+    try:
+        # 2. Initialize and Run the App
+        app = KegLevelApp()
+        # Pass the queue so the App can kill the splash when ready
+        app.splash_queue = splash_queue 
+        app.run()
+        
+    except KeyboardInterrupt:
+        if hasattr(app, 'sensor_logic') and app.sensor_logic:
+            app.sensor_logic.cleanup_gpio()
+        print("\nKegLevel App interrupted by user.")
+        
+    finally:
+        # Ensure splash process is definitely dead on exit
+        if splash_process.is_alive():
+            splash_process.terminate()
