@@ -129,6 +129,70 @@ class SettingsConfigTab(BoxLayout):
         app.apply_config_changes()
         app.root.current = 'dashboard'
 
+    def request_monitor_import(self):
+        """Triggers the backend migration tool and reports results."""
+        from kivy.uix.popup import Popup
+        from kivy.uix.label import Label
+        from kivy.uix.button import Button
+        from kivy.uix.checkbox import CheckBox
+        
+        content = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        content.add_widget(Label(text="Import data from 'KegLevel Monitor'?\n\nThis will merge unique Kegs & Beverages\nand update Tap Assignments.", halign='center'))
+        
+        # Checkbox Row
+        chk_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=40, spacing=5)
+        # Checkbox active by default
+        chk = CheckBox(active=True, size_hint_x=None, width=40)
+        lbl = Label(text="Import sensor calibration factors?", halign='left', valign='middle')
+        lbl.bind(size=lbl.setter('text_size')) # Ensure text wrapping/alignment works if needed
+        
+        chk_box.add_widget(chk)
+        chk_box.add_widget(lbl)
+        content.add_widget(chk_box)
+        
+        btns = BoxLayout(size_hint_y=None, height=50, spacing=10)
+        
+        # Use lambda to capture the specific popup instance and check state
+        btn_cancel = Button(text="Cancel", on_release=lambda x: popup.dismiss())
+        btn_go = Button(text="IMPORT", background_color=(0, 0.6, 0, 1), 
+                        on_release=lambda x: self._run_import(popup, chk.active))
+        
+        btns.add_widget(btn_cancel)
+        btns.add_widget(btn_go)
+        content.add_widget(btns)
+        
+        popup = Popup(title="Confirm Import", content=content, size_hint=(None, None), size=(450, 300))
+        popup.open()
+
+    def _run_import(self, popup, import_calibration):
+        popup.dismiss()
+        app = App.get_running_app()
+        success, msg = app.settings_manager.import_data_from_monitor(import_calibration=import_calibration)
+        
+        # Result Popup
+        from kivy.uix.popup import Popup
+        from kivy.uix.label import Label
+        from kivy.uix.button import Button
+        
+        content = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        content.add_widget(Label(text=msg, text_size=(380, None), halign='center', valign='middle'))
+        
+        res_popup = None
+        def close_res(instance):
+            if res_popup: res_popup.dismiss()
+            
+        btn = Button(text="OK", size_hint_y=None, height=50, on_release=close_res)
+        content.add_widget(btn)
+        
+        res_popup = Popup(title="Import Result", content=content, size_hint=(None, None), size=(400, 250))
+        res_popup.open()
+        
+        if success:
+            app.refresh_keg_list()
+            app.refresh_beverage_list()
+            app.refresh_dashboard_metadata()
+            app.sensor_logic.force_recalculation()
+
 class SettingsUpdatesTab(BoxLayout):
     """Logic for System Updates."""
     log_text = StringProperty("Ready to check for updates.\n")
@@ -525,11 +589,36 @@ class KegEditScreen(Screen):
         self.total_weight_kg = value
         self.update_display_labels()
 
+    def _generate_next_keg_title(self, all_kegs):
+        """
+        Finds the first available 'Keg {nn}' title by looking for gaps
+        in the existing numbering sequence.
+        """
+        existing_numbers = set()
+        
+        for k in all_kegs:
+            title = k.get('title', '')
+            # Check if title follows standard "Keg " format
+            if title.startswith("Keg "):
+                try:
+                    # Extract the number part
+                    num_str = title[4:].strip()
+                    if num_str.isdigit():
+                        existing_numbers.add(int(num_str))
+                except ValueError:
+                    continue
+        
+        # Start looking from 1 upwards for the first empty slot
+        next_num = 1
+        while next_num in existing_numbers:
+            next_num += 1
+            
+        return f"Keg {next_num:02}"
+
     def save_keg_edit(self):
         app = App.get_running_app()
         
         # 1. Determine Metric Values from Sliders
-        #    (The sliders might be showing Gallons/Lbs, but DB needs Liters/Kg)
         units = app.settings_manager.get_display_units()
         using_metric = (units == "metric")
         
@@ -538,12 +627,11 @@ class KegEditScreen(Screen):
             final_tare_kg = self.tare_weight_kg
             final_total_kg = self.total_weight_kg
         else:
-            # Convert Imperial inputs back to Metric for storage
             final_vol_liters = self.max_volume_liters / LITERS_TO_GAL
             final_tare_kg = self.tare_weight_kg / KG_TO_LBS
             final_total_kg = self.total_weight_kg / KG_TO_LBS
 
-        # 2. Resolve Beverage ID from Name
+        # 2. Resolve Beverage ID
         bev_name = self.beverage_name
         bev_id = UNASSIGNED_BEVERAGE_ID
         if bev_name != "Empty":
@@ -551,55 +639,53 @@ class KegEditScreen(Screen):
             found = next((b for b in lib if b['name'] == bev_name), None)
             if found: bev_id = found['id']
 
-        # 3. Calculate Starting Liquid Volume (Always calculated in Metric)
+        # 3. Calculate Volume
         density = 1.014
         liquid_kg = final_total_kg - final_tare_kg
         calc_start_vol = liquid_kg / density
 
-        # 4. Handle "New Keg" vs "Edit Existing"
-        #    (Restoring logic from the original KegLevelApp function)
+        # 4. Handle ID and Title
         is_new = (self.keg_id == "")
         new_keg_id = self.keg_id if not is_new else str(uuid.uuid4())
         
-        all_kegs = app.settings_manager.get_keg_definitions()
-
-        if is_new:
-            existing_count = len(all_kegs)
-            title = f"Keg {existing_count + 1:02}"
+        # --- DATA PRESERVATION START ---
+        # Fetch existing record to preserve extra fields (e.g. from Monitor)
+        existing_record = app.settings_manager.get_keg_by_id(new_keg_id)
+        if existing_record and not is_new:
+            keg_data = existing_record.copy()
         else:
-            # Keep existing title
-            old_keg = app.settings_manager.get_keg_by_id(new_keg_id)
-            title = old_keg['title'] if old_keg else f"Keg {new_keg_id[:4]}"
+            keg_data = {
+                "id": new_keg_id,
+                "current_dispensed_liters": 0.0,
+                "total_dispensed_pulses": 0,
+                "fill_date": datetime.now().strftime("%Y-%m-%d")
+            }
+            # Use backend helper for naming
+            keg_data['title'] = app.settings_manager.generate_next_keg_title()
+        # --- DATA PRESERVATION END ---
 
-        # 5. Construct the Data Dictionary
-        keg_data = {
-            "id": new_keg_id,
-            "title": title,
+        # 5. Update with Form Data
+        keg_data.update({
             "tare_weight_kg": float(final_tare_kg),
             "starting_total_weight_kg": float(final_total_kg),
             "maximum_full_volume_liters": float(final_vol_liters),
             "calculated_starting_volume_liters": float(calc_start_vol),
-            "beverage_id": bev_id,
-            "current_dispensed_liters": 0.0, 
-            "total_dispensed_pulses": 0,
-            "fill_date": datetime.now().strftime("%Y-%m-%d")
-        }
+            "beverage_id": bev_id
+        })
 
-        # 6. Save to List
+        # 6. Save
+        all_kegs = app.settings_manager.get_keg_definitions()
         if is_new:
             all_kegs.append(keg_data)
         else:
-            # Find and replace in place
             for i, k in enumerate(all_kegs):
                 if k['id'] == new_keg_id:
                     all_kegs[i] = keg_data
                     break
         
-        # 7. Commit Save
-        #    (Passing the required list argument)
         app.settings_manager.save_keg_definitions(all_kegs)
         
-        # 8. Refresh and Navigate
+        # 7. Refresh
         app.refresh_keg_list()
         app.refresh_dashboard_metadata()
         app.sensor_logic.force_recalculation()
@@ -1161,6 +1247,10 @@ class KegLevelApp(App):
 
     def refresh_keg_list(self):
         kegs = self.settings_manager.get_keg_definitions()
+        
+        # Sort kegs by title to ensure logical display (Keg 01, Keg 02...)
+        kegs.sort(key=lambda k: k.get('title', ''))
+
         bev_lib = self.settings_manager.get_beverage_library().get('beverages', [])
         bev_map = {b['id']: b['name'] for b in bev_lib}
         data_list = []
@@ -1190,6 +1280,10 @@ class KegLevelApp(App):
     def open_tap_selector(self, tap_index):
         popup = KegSelectPopup(title=f"Select Keg for Tap {tap_index+1}")
         all_kegs = self.settings_manager.get_keg_definitions()
+        
+        # Sort kegs by title to ensure logical display (Keg 01, Keg 02...)
+        all_kegs.sort(key=lambda k: k.get('title', ''))
+        
         assignments = self.settings_manager.get_sensor_keg_assignments()
         assigned_set = set(assignments)
         
@@ -1374,47 +1468,6 @@ class KegLevelApp(App):
         self.keg_edit_screen.update_display_labels()
         self.root.current = 'keg_edit'
 
-    # ~ DUPLICATE FUNCTION? THIS FUNCTION EXISTS IN CLASS KEGLEVELEDIT
-    # ~ def save_keg_edit(self):
-        # ~ scr = self.keg_edit_screen
-        # ~ bev_name = scr.beverage_name
-        # ~ bev_id = UNASSIGNED_BEVERAGE_ID
-        # ~ if bev_name != "Empty":
-            # ~ bev_lib = self.settings_manager.get_beverage_library().get('beverages', [])
-            # ~ found = next((b for b in bev_lib if b['name'] == bev_name), None)
-            # ~ if found: bev_id = found['id']
-        # ~ vol_liters = self.settings_manager._calculate_volume_from_weight(scr.total_weight_kg, scr.tare_weight_kg)
-        # ~ is_new = (scr.keg_id == "")
-        # ~ new_keg_id = scr.keg_id if not is_new else str(uuid.uuid4())
-        # ~ if is_new:
-            # ~ existing_count = len(self.settings_manager.get_keg_definitions())
-            # ~ title = f"Keg {existing_count + 1:02}"
-        # ~ else:
-            # ~ old_keg = self.settings_manager.get_keg_by_id(new_keg_id)
-            # ~ title = old_keg['title']
-        # ~ keg_data = {
-            # ~ "id": new_keg_id,
-            # ~ "title": title,
-            # ~ "tare_weight_kg": float(scr.tare_weight_kg),
-            # ~ "starting_total_weight_kg": float(scr.total_weight_kg),
-            # ~ "maximum_full_volume_liters": float(scr.max_volume_liters),
-            # ~ "calculated_starting_volume_liters": vol_liters,
-            # ~ "beverage_id": bev_id,
-            # ~ "current_dispensed_liters": 0.0, 
-            # ~ "total_dispensed_pulses": 0,
-            # ~ "fill_date": ""
-        # ~ }
-        # ~ all_kegs = self.settings_manager.get_keg_definitions()
-        # ~ if is_new: all_kegs.append(keg_data)
-        # ~ else:
-            # ~ for i, k in enumerate(all_kegs):
-                # ~ if k['id'] == new_keg_id: all_kegs[i] = keg_data; break
-        # ~ self.settings_manager.save_keg_definitions(all_kegs)
-        # ~ self.refresh_keg_list()
-        # ~ self.refresh_dashboard_metadata()
-        # ~ self.sensor_logic.force_recalculation()
-        # ~ self.root.current = 'inventory'
-
     def delete_keg(self, keg_id):
         self.settings_manager.delete_keg_definition(keg_id)
         self.refresh_keg_list()
@@ -1451,26 +1504,74 @@ class KegLevelApp(App):
         scr = self.bev_edit_screen
         try: ibu = int(scr.bev_ibu) if scr.bev_ibu else None
         except ValueError: ibu = None
+        
         is_new = (scr.bev_id == "")
         new_id = scr.bev_id if not is_new else str(uuid.uuid4())
-        new_data = {
-            'id': new_id,
+        
+        lib_container = self.settings_manager.get_beverage_library()
+        lib = lib_container.get('beverages', [])
+        
+        # --- DATA PRESERVATION START ---
+        # Find existing record to preserve extra fields (e.g. from Monitor)
+        existing_record = next((b for b in lib if b['id'] == new_id), None)
+        
+        if existing_record and not is_new:
+            # Copy existing data to preserve hidden fields
+            new_data = existing_record.copy()
+        else:
+            new_data = {
+                'id': new_id,
+                'bjcp': "", 
+                'description': ''
+            }
+        # --- DATA PRESERVATION END ---
+
+        # Update with Form Data
+        new_data.update({
             'name': scr.bev_name,
-            'bjcp': "", 
             'abv': scr.bev_abv,
             'ibu': ibu,
-            'srm': int(scr.bev_srm),
-            'description': ''
-        }
-        lib = self.settings_manager.get_beverage_library().get('beverages', [])
-        if is_new: lib.append(new_data)
+            'srm': int(scr.bev_srm)
+        })
+
+        # Save back to list
+        if is_new: 
+            lib.append(new_data)
         else:
             for i, b in enumerate(lib):
-                if b['id'] == new_id: lib[i] = new_data; break
+                if b['id'] == new_id: 
+                    lib[i] = new_data; 
+                    break
+        
         self.settings_manager.save_beverage_library(lib)
         self.refresh_beverage_list()
         self.refresh_dashboard_metadata()
         self.root.current = 'inventory'
+    
+    # ~ def save_beverage_edit(self):
+        # ~ scr = self.bev_edit_screen
+        # ~ try: ibu = int(scr.bev_ibu) if scr.bev_ibu else None
+        # ~ except ValueError: ibu = None
+        # ~ is_new = (scr.bev_id == "")
+        # ~ new_id = scr.bev_id if not is_new else str(uuid.uuid4())
+        # ~ new_data = {
+            # ~ 'id': new_id,
+            # ~ 'name': scr.bev_name,
+            # ~ 'bjcp': "", 
+            # ~ 'abv': scr.bev_abv,
+            # ~ 'ibu': ibu,
+            # ~ 'srm': int(scr.bev_srm),
+            # ~ 'description': ''
+        # ~ }
+        # ~ lib = self.settings_manager.get_beverage_library().get('beverages', [])
+        # ~ if is_new: lib.append(new_data)
+        # ~ else:
+            # ~ for i, b in enumerate(lib):
+                # ~ if b['id'] == new_id: lib[i] = new_data; break
+        # ~ self.settings_manager.save_beverage_library(lib)
+        # ~ self.refresh_beverage_list()
+        # ~ self.refresh_dashboard_metadata()
+        # ~ self.root.current = 'inventory'
 
     def delete_beverage(self, bev_id):
         lib = self.settings_manager.get_beverage_library().get('beverages', [])

@@ -825,13 +825,39 @@
             id: spin_taps
             text: "4"
             values: ["1", "2", "3", "4", "5"]
-            size_hint_x: 0.35  # Reduced from 0.7 to 0.35 (Half width)
+            size_hint_x: 0.35
             font_size: '20sp'
             background_color: 0.25, 0.25, 0.25, 1
         
-        # Spacer to maintain alignment (Fills the remaining 35%)
+        # Spacer to maintain alignment
         Label:
             size_hint_x: 0.35
+
+    # 3. MIGRATION (New Section)
+    BoxLayout:
+        size_hint_y: None
+        height: 60
+        Label:
+            text: "Data Migration:"
+            font_size: '22sp'
+            bold: True
+            halign: 'left'
+            valign: 'middle'
+            text_size: self.size
+            size_hint_x: 0.3
+        Button:
+            text: "IMPORT FROM\nKEGLEVEL MONITOR"
+            font_size: '14sp'
+            bold: True
+            background_color: 0.2, 0.4, 0.8, 1
+            size_hint_x: 0.35
+            on_release: root.request_monitor_import()
+        Label:
+            size_hint_x: 0.35
+
+    # Spacer
+    Label:
+        size_hint_y: 1
 
 <SettingsUpdatesTab>:
     orientation: 'vertical'
