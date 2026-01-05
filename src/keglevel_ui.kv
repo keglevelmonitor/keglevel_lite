@@ -190,8 +190,8 @@
     KegActionButton:
         text: 'Delete'
         background_color: 0.6, 0.1, 0.1, 1
-        on_release: app.delete_keg(root.keg_id)
-
+        on_release: app.request_delete_keg(root.keg_id)
+        
 <BeverageListItem>:
     size_hint_y: None
     height: 60
@@ -206,8 +206,7 @@
             size: self.size
     Label:
         text: root.name
-        font_size: '18sp'   # CHANGED: Was 20sp
-        # REMOVED: bold: True (Matches KegListItem style)
+        font_size: '18sp'
         text_size: self.size
         halign: 'left'
         valign: 'middle'
@@ -218,9 +217,59 @@
     KegActionButton:
         text: 'Delete'
         background_color: 0.6, 0.1, 0.1, 1
-        on_release: app.delete_beverage(root.bev_id)
+        on_release: app.request_delete_beverage(root.bev_id)
 
 # --- POPUP WIDGETS ---
+<ConfirmPopup>:
+    size_hint: None, None
+    size: dp(400), dp(250)
+    title_size: '18sp'
+    auto_dismiss: False
+    
+    # Custom Background to match Dark Theme
+    canvas.before:
+        Color:
+            rgba: 0.1, 0.1, 0.1, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
+        Color:
+            rgba: 0.8, 0.2, 0.2, 1 # Red Border for Warning
+        Line:
+            rectangle: self.x, self.y, self.width, self.height
+            width: 2
+
+    BoxLayout:
+        orientation: 'vertical'
+        padding: 20
+        spacing: 20
+        
+        Label:
+            text: root.text
+            font_size: '18sp'
+            halign: 'center'
+            valign: 'middle'
+            text_size: self.size
+            color: 0.9, 0.9, 0.9, 1
+            
+        BoxLayout:
+            size_hint_y: None
+            height: 50
+            spacing: 20
+            
+            Button:
+                text: "Cancel"
+                font_size: '16sp'
+                background_color: 0.4, 0.4, 0.4, 1
+                on_release: root.dismiss()
+                
+            Button:
+                text: "DELETE"
+                bold: True
+                font_size: '16sp'
+                background_color: 0.8, 0.1, 0.1, 1
+                on_release: root.confirm()
+
 <SimulationPopup>:
     title: "Developer Simulation Dashboard"
     title_size: '18sp'
@@ -1384,6 +1433,8 @@
             orientation: 'vertical'
             padding: 30
             spacing: 15
+            
+            # --- ROW 1: NAME ---
             BoxLayout:
                 size_hint_y: None
                 height: 50
@@ -1395,29 +1446,66 @@
                     font_size: '20sp'
                     size_hint_x: 0.65
                     on_text: root.bev_name = self.text
+
+            # --- ROW 2: ABV SLIDER ---
             BoxLayout:
                 size_hint_y: None
                 height: 50
                 EditLabel:
-                    text: "ABV % / IBU:"
-                TextInput:
-                    text: root.bev_abv
-                    multiline: False
-                    input_filter: 'float'
-                    hint_text: "ABV"
-                    font_size: '20sp'
-                    size_hint_x: 0.3
-                    on_text: root.bev_abv = self.text
-                Label:
-                    size_hint_x: 0.05
-                TextInput:
-                    text: root.bev_ibu
-                    multiline: False
-                    input_filter: 'int'
-                    hint_text: "IBU"
-                    font_size: '20sp'
-                    size_hint_x: 0.3
-                    on_text: root.bev_ibu = self.text
+                    text: "ABV %:"
+                    size_hint_x: 0.25
+
+                FineTuneButton:
+                    text: "-"
+                    on_release: sli_abv.value = max(sli_abv.min, sli_abv.value - sli_abv.step)
+
+                Slider:
+                    id: sli_abv
+                    min: 0.0
+                    max: 14.0
+                    step: 0.1
+                    value: root.bev_abv
+                    size_hint_x: 0.5
+                    on_value: root.bev_abv = self.value
+
+                FineTuneButton:
+                    text: "+"
+                    on_release: sli_abv.value = min(sli_abv.max, sli_abv.value + sli_abv.step)
+
+                KegValueLabel:
+                    text: "{:.1f} %".format(root.bev_abv)
+                    size_hint_x: 0.15
+
+            # --- ROW 3: IBU SLIDER ---
+            BoxLayout:
+                size_hint_y: None
+                height: 50
+                EditLabel:
+                    text: "IBU:"
+                    size_hint_x: 0.25
+
+                FineTuneButton:
+                    text: "-"
+                    on_release: sli_ibu.value = max(sli_ibu.min, sli_ibu.value - sli_ibu.step)
+
+                Slider:
+                    id: sli_ibu
+                    min: 0
+                    max: 100
+                    step: 1
+                    value: root.bev_ibu
+                    size_hint_x: 0.5
+                    on_value: root.bev_ibu = int(self.value)
+
+                FineTuneButton:
+                    text: "+"
+                    on_release: sli_ibu.value = min(sli_ibu.max, sli_ibu.value + sli_ibu.step)
+
+                KegValueLabel:
+                    text: "{:.0f}".format(root.bev_ibu)
+                    size_hint_x: 0.15
+
+            # --- ROW 4: COLOR (SRM) ---
             BoxLayout:
                 size_hint_y: None
                 height: 60

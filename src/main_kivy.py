@@ -193,6 +193,15 @@ class SettingsConfigTab(BoxLayout):
             app.refresh_dashboard_metadata()
             app.sensor_logic.force_recalculation()
 
+class ConfirmPopup(Popup):
+    text = StringProperty("")
+    action_callback = ObjectProperty(None)
+    
+    def confirm(self):
+        if self.action_callback:
+            self.action_callback()
+        self.dismiss()
+
 class SettingsUpdatesTab(BoxLayout):
     """Logic for System Updates."""
     log_text = StringProperty("Ready to check for updates.\n")
@@ -696,8 +705,9 @@ class BeverageEditScreen(Screen):
     bev_id = StringProperty("")
     bev_name = StringProperty("")
     bev_style = StringProperty("")
-    bev_abv = StringProperty("")
-    bev_ibu = StringProperty("")
+    # CHANGED: Properties converted to Numeric for Slider binding
+    bev_abv = NumericProperty(0.0)
+    bev_ibu = NumericProperty(0)
     bev_srm = NumericProperty(5)
     preview_color = ListProperty([1, 0.75, 0, 1])
     def on_bev_srm(self, instance, value):
@@ -1448,6 +1458,10 @@ class KegLevelApp(App):
         bev_names = sorted([b['name'] for b in bev_lib])
         self.keg_edit_screen.beverage_list = ["Empty"] + bev_names
         
+        # Check units to determine display values
+        units = self.settings_manager.get_display_units()
+        is_metric = (units == "metric")
+
         if keg_id:
             self.keg_edit_screen.screen_title = "Edit Keg"
             self.keg_edit_screen.keg_id = keg_id
@@ -1455,20 +1469,51 @@ class KegLevelApp(App):
             b_id = keg.get('beverage_id')
             found_bev = next((b for b in bev_lib if b['id'] == b_id), None)
             self.keg_edit_screen.beverage_name = found_bev['name'] if found_bev else "Empty"
-            self.keg_edit_screen.max_volume_liters = float(keg.get('maximum_full_volume_liters', 19.0))
-            self.keg_edit_screen.tare_weight_kg = float(keg.get('tare_weight_kg', 4.5))
-            self.keg_edit_screen.total_weight_kg = float(keg.get('starting_total_weight_kg', 4.5))
+            
+            # Load from DB (Always Metric)
+            raw_vol = float(keg.get('maximum_full_volume_liters', 19.0))
+            raw_tare = float(keg.get('tare_weight_kg', 4.0))
+            raw_total = float(keg.get('starting_total_weight_kg', 4.0))
+
+            # Convert to Display Units if needed
+            if is_metric:
+                self.keg_edit_screen.max_volume_liters = raw_vol
+                self.keg_edit_screen.tare_weight_kg = raw_tare
+                self.keg_edit_screen.total_weight_kg = raw_total
+            else:
+                self.keg_edit_screen.max_volume_liters = raw_vol * LITERS_TO_GAL
+                self.keg_edit_screen.tare_weight_kg = raw_tare * KG_TO_LBS
+                self.keg_edit_screen.total_weight_kg = raw_total * KG_TO_LBS
         else:
             self.keg_edit_screen.screen_title = "Add New Keg"
             self.keg_edit_screen.keg_id = "" 
             self.keg_edit_screen.beverage_name = "Empty"
-            self.keg_edit_screen.max_volume_liters = 19.0
-            self.keg_edit_screen.tare_weight_kg = 4.5
-            self.keg_edit_screen.total_weight_kg = 23.5
+            
+            # UPDATED: Set Defaults based on Units
+            if is_metric:
+                # Metric Defaults: 19.0 L, 4.0 kg Tare, 4.0 kg Total
+                self.keg_edit_screen.max_volume_liters = 19.0
+                self.keg_edit_screen.tare_weight_kg = 4.0
+                self.keg_edit_screen.total_weight_kg = 4.0
+            else:
+                # Imperial Defaults: 5.0 Gal, 8.8 lb Tare, 8.8 lb Total
+                self.keg_edit_screen.max_volume_liters = 5.0
+                self.keg_edit_screen.tare_weight_kg = 8.8
+                self.keg_edit_screen.total_weight_kg = 8.8
+
         self.keg_edit_screen.update_display_labels()
         self.root.current = 'keg_edit'
 
-    def delete_keg(self, keg_id):
+    def request_delete_keg(self, keg_id):
+        keg = self.settings_manager.get_keg_by_id(keg_id)
+        title = keg.get('title', 'Unknown Keg') if keg else "Unknown Keg"
+        
+        popup = ConfirmPopup(title="Confirm Deletion")
+        popup.text = f"Permanently delete {title}?\nTap assignment will be cleared."
+        popup.action_callback = lambda: self.perform_delete_keg(keg_id)
+        popup.open()
+
+    def perform_delete_keg(self, keg_id):
         self.settings_manager.delete_keg_definition(keg_id)
         self.refresh_keg_list()
         self.refresh_dashboard_metadata()
@@ -1486,8 +1531,21 @@ class KegLevelApp(App):
             found = next((b for b in lib if b['id'] == bev_id), None)
             if found:
                 self.bev_edit_screen.bev_name = found.get('name', '')
-                self.bev_edit_screen.bev_abv = str(found.get('abv', ''))
-                self.bev_edit_screen.bev_ibu = str(found.get('ibu', ''))
+                
+                # UPDATED: Load ABV (Handle "" as 0.0 for slider)
+                raw_abv = found.get('abv')
+                try: 
+                    self.bev_edit_screen.bev_abv = float(raw_abv)
+                except (ValueError, TypeError): 
+                    self.bev_edit_screen.bev_abv = 0.0
+
+                # UPDATED: Load IBU (Handle "" as 0 for slider)
+                raw_ibu = found.get('ibu')
+                try: 
+                    self.bev_edit_screen.bev_ibu = int(raw_ibu)
+                except (ValueError, TypeError): 
+                    self.bev_edit_screen.bev_ibu = 0
+                
                 srm_val = found.get('srm')
                 try: self.bev_edit_screen.bev_srm = int(srm_val)
                 except: self.bev_edit_screen.bev_srm = 5
@@ -1495,15 +1553,18 @@ class KegLevelApp(App):
             self.bev_edit_screen.screen_title = "Add New Beverage"
             self.bev_edit_screen.bev_id = ""
             self.bev_edit_screen.bev_name = ""
-            self.bev_edit_screen.bev_abv = ""
-            self.bev_edit_screen.bev_ibu = ""
+            # UPDATED: Defaults for new beverage
+            self.bev_edit_screen.bev_abv = 0.0
+            self.bev_edit_screen.bev_ibu = 0
             self.bev_edit_screen.bev_srm = 5
         self.root.current = 'bev_edit'
 
     def save_beverage_edit(self):
         scr = self.bev_edit_screen
-        try: ibu = int(scr.bev_ibu) if scr.bev_ibu else None
-        except ValueError: ibu = None
+        
+        # UPDATED: Logic to convert 0 to "" as requested
+        final_ibu = int(scr.bev_ibu) if scr.bev_ibu > 0 else ""
+        final_abv = scr.bev_abv if scr.bev_abv > 0 else ""
         
         is_new = (scr.bev_id == "")
         new_id = scr.bev_id if not is_new else str(uuid.uuid4())
@@ -1529,8 +1590,8 @@ class KegLevelApp(App):
         # Update with Form Data
         new_data.update({
             'name': scr.bev_name,
-            'abv': scr.bev_abv,
-            'ibu': ibu,
+            'abv': final_abv, # Saves as float or ""
+            'ibu': final_ibu, # Saves as int or ""
             'srm': int(scr.bev_srm)
         })
 
@@ -1548,46 +1609,82 @@ class KegLevelApp(App):
         self.refresh_dashboard_metadata()
         self.root.current = 'inventory'
     
-    # ~ def save_beverage_edit(self):
-        # ~ scr = self.bev_edit_screen
-        # ~ try: ibu = int(scr.bev_ibu) if scr.bev_ibu else None
-        # ~ except ValueError: ibu = None
-        # ~ is_new = (scr.bev_id == "")
-        # ~ new_id = scr.bev_id if not is_new else str(uuid.uuid4())
-        # ~ new_data = {
-            # ~ 'id': new_id,
-            # ~ 'name': scr.bev_name,
-            # ~ 'bjcp': "", 
-            # ~ 'abv': scr.bev_abv,
-            # ~ 'ibu': ibu,
-            # ~ 'srm': int(scr.bev_srm),
-            # ~ 'description': ''
-        # ~ }
-        # ~ lib = self.settings_manager.get_beverage_library().get('beverages', [])
-        # ~ if is_new: lib.append(new_data)
-        # ~ else:
-            # ~ for i, b in enumerate(lib):
-                # ~ if b['id'] == new_id: lib[i] = new_data; break
-        # ~ self.settings_manager.save_beverage_library(lib)
-        # ~ self.refresh_beverage_list()
-        # ~ self.refresh_dashboard_metadata()
-        # ~ self.root.current = 'inventory'
+    def request_delete_beverage(self, bev_id):
+        lib = self.settings_manager.get_beverage_library().get('beverages', [])
+        found = next((b for b in lib if b['id'] == bev_id), None)
+        name = found.get('name', 'Unknown') if found else "Unknown Beverage"
+        
+        popup = ConfirmPopup(title="Confirm Deletion")
+        popup.text = f"Permanently delete{name}?\nKeg and Tap assignments will be cleared."
+        popup.action_callback = lambda: self.perform_delete_beverage(bev_id)
+        popup.open()
 
-    def delete_beverage(self, bev_id):
+    def perform_delete_beverage(self, bev_id):
+        # 1. Remove Beverage from Library
         lib = self.settings_manager.get_beverage_library().get('beverages', [])
         new_lib = [b for b in lib if b['id'] != bev_id]
         self.settings_manager.save_beverage_library(new_lib)
+        
+        # 2. Determine Defaults based on current Unit Settings
+        units = self.settings_manager.get_display_units()
+        is_metric = (units == "metric")
+        
+        # Constants from top of file: LITERS_TO_GAL = 0.264172, KG_TO_LBS = 2.20462
+        if is_metric:
+            def_vol = 19.0
+            def_tare = 4.0
+            def_total = 4.0
+        else:
+            # Calculate Metric equivalents for 5.0 Gal / 8.8 lb
+            def_vol = 5.0 / LITERS_TO_GAL      # ~18.93 L
+            def_tare = 8.8 / KG_TO_LBS         # ~3.99 kg
+            def_total = 8.8 / KG_TO_LBS
+
+        # 3. Reset Kegs containing this beverage
         kegs = self.settings_manager.get_keg_definitions()
+        affected_keg_ids = set()
+        
         for k in kegs:
-            if k.get('beverage_id') == bev_id: k['beverage_id'] = UNASSIGNED_BEVERAGE_ID
+            if k.get('beverage_id') == bev_id:
+                affected_keg_ids.add(k.get('id'))
+                
+                # Reset to calculated defaults -> Empty
+                k['beverage_id'] = UNASSIGNED_BEVERAGE_ID
+                k['maximum_full_volume_liters'] = def_vol
+                k['tare_weight_kg'] = def_tare
+                k['starting_total_weight_kg'] = def_total
+                k['calculated_starting_volume_liters'] = 0.0
+                k['current_dispensed_liters'] = 0.0
+                k['total_dispensed_pulses'] = 0
+                k['fill_date'] = ""
+                
         self.settings_manager.save_keg_definitions(kegs)
-        assigns = self.settings_manager.get_sensor_beverage_assignments()
-        for i, bid in enumerate(assigns):
-            if bid == bev_id:
+        
+        # 4. Set Taps to Offline if they were assigned an affected Keg
+        tap_keg_assigns = self.settings_manager.get_sensor_keg_assignments()
+        tap_bev_assigns = self.settings_manager.get_sensor_beverage_assignments()
+        
+        for i in range(len(tap_keg_assigns)):
+            k_id = tap_keg_assigns[i]
+            b_id = tap_bev_assigns[i] if i < len(tap_bev_assigns) else None
+            
+            should_offline_tap = False
+            
+            # Rule: If tap assigned to a keg that had the deleted beverage -> Offline
+            if k_id in affected_keg_ids:
+                should_offline_tap = True
+                self.settings_manager.save_sensor_keg_assignment(i, UNASSIGNED_KEG_ID)
+            
+            # Cleanup: If tap thinks it has this beverage (or we offlined it) -> Clear Bev
+            if b_id == bev_id or should_offline_tap:
                 self.settings_manager.save_sensor_beverage_assignment(i, UNASSIGNED_BEVERAGE_ID)
+
+        # 5. Refresh System
         self.refresh_beverage_list()
         self.refresh_keg_list()
         self.refresh_dashboard_metadata()
+        if hasattr(self, 'sensor_logic') and self.sensor_logic:
+            self.sensor_logic.force_recalculation()
 
     def apply_config_changes(self):
         print("Applying Configuration Changes...")
