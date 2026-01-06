@@ -251,12 +251,14 @@ class SettingsUpdatesTab(BoxLayout):
         cmd = ["bash", script_path] + flags
         try:
             # Run process and capture output line-by-line
+            # FIX: Explicitly set cwd to project_root so git commands work from autostart
             process = subprocess.Popen(
                 cmd, 
                 stdout=subprocess.PIPE, 
                 stderr=subprocess.STDOUT, 
                 text=True, 
-                bufsize=1
+                bufsize=1,
+                cwd=project_root
             )
             
             update_available = False
