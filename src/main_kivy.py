@@ -1,4 +1,4 @@
-# keglevel app
+# keglevel-lite app
 # main_kivy.py
 import os
 import threading
