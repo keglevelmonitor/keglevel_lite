@@ -1603,7 +1603,10 @@ class KegLevelApp(App):
         
         # UPDATED: Logic to convert 0 to "" as requested
         final_ibu = int(scr.bev_ibu) if scr.bev_ibu > 0 else ""
-        final_abv = scr.bev_abv if scr.bev_abv > 0 else ""
+        
+        # FIX: Round to 1 decimal place to prevent slider float artifacts (e.g. 5.19999)
+        rounded_abv = round(scr.bev_abv, 1)
+        final_abv = rounded_abv if rounded_abv > 0 else ""
         
         is_new = (scr.bev_id == "")
         new_id = scr.bev_id if not is_new else str(uuid.uuid4())
