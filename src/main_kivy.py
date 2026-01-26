@@ -38,6 +38,7 @@ from kivy.uix.behaviors import ButtonBehavior
 from kivy.properties import StringProperty, NumericProperty, ObjectProperty, ListProperty, BooleanProperty
 from kivy.utils import get_color_from_hex
 from kivy.uix.screenmanager import ScreenManager, Screen, SlideTransition, NoTransition
+from kivy.core.window import Window
 
 # --- 2. IMPORT BACKEND LOGIC ---
 from settings_manager import SettingsManager, UNASSIGNED_KEG_ID, UNASSIGNED_BEVERAGE_ID
@@ -706,12 +707,17 @@ class BeverageEditScreen(Screen):
     screen_title = StringProperty("Edit Beverage")
     bev_id = StringProperty("")
     bev_name = StringProperty("")
+    # --- NEW PROPERTIES ---
+    bev_bjcp = StringProperty("")
+    bjcp_list = ListProperty([])
+    # ----------------------
     bev_style = StringProperty("")
-    # CHANGED: Properties converted to Numeric for Slider binding
+    # These properties hold the CURRENT SLIDER VALUE
     bev_abv = NumericProperty(0.0)
     bev_ibu = NumericProperty(0)
     bev_srm = NumericProperty(5)
     preview_color = ListProperty([1, 0.75, 0, 1])
+    
     def on_bev_srm(self, instance, value):
         self.preview_color = get_srm_color_rgba(int(value))
 
@@ -1012,6 +1018,19 @@ class KegLevelApp(App):
         # 1. Initialize Data Manager
         self.settings_manager = SettingsManager(len(FLOW_SENSOR_PINS))
         self.num_sensors = self.settings_manager.get_displayed_taps()
+        
+        # --- NEW: Restore Window Position AND Size ---
+        win_cfg = self.settings_manager.get_app_window_settings()
+        
+        # Restore Position
+        if win_cfg['x'] != -1 and win_cfg['y'] != -1:
+            Window.left = win_cfg['x']
+            Window.top = win_cfg['y']
+            
+        # Restore Size
+        if win_cfg['width'] > 100 and win_cfg['height'] > 100:
+            Window.size = (win_cfg['width'], win_cfg['height'])
+        # ---------------------------------------------
         
         # 2. Instantiate Screens
         self.dashboard_screen = DashboardScreen(name='dashboard')
@@ -1526,6 +1545,18 @@ class KegLevelApp(App):
     # --- Actions: BEVERAGES ---
     def open_beverage_edit(self, bev_id):
         self.inventory_screen.show_bevs()
+        
+        # --- NEW: Load BJCP Styles ---
+        try:
+            styles = self.settings_manager.load_bjcp_styles()
+            # Format as "Code Name" (e.g., "18B American Pale Ale")
+            style_list = [f"{s.get('code', '?')} {s.get('name', '?')}" for s in styles]
+            self.bev_edit_screen.bjcp_list = style_list
+        except Exception as e:
+            print(f"Error loading BJCP styles: {e}")
+            self.bev_edit_screen.bjcp_list = []
+        # -----------------------------
+
         if bev_id:
             self.bev_edit_screen.screen_title = "Edit Beverage"
             self.bev_edit_screen.bev_id = bev_id
@@ -1533,6 +1564,10 @@ class KegLevelApp(App):
             found = next((b for b in lib if b['id'] == bev_id), None)
             if found:
                 self.bev_edit_screen.bev_name = found.get('name', '')
+                
+                # --- NEW: Load BJCP selection ---
+                self.bev_edit_screen.bev_bjcp = found.get('bjcp', '')
+                # --------------------------------
                 
                 # UPDATED: Load ABV (Handle "" as 0.0 for slider)
                 raw_abv = found.get('abv')
@@ -1555,6 +1590,8 @@ class KegLevelApp(App):
             self.bev_edit_screen.screen_title = "Add New Beverage"
             self.bev_edit_screen.bev_id = ""
             self.bev_edit_screen.bev_name = ""
+            self.bev_edit_screen.bev_bjcp = "" # Reset
+            
             # UPDATED: Defaults for new beverage
             self.bev_edit_screen.bev_abv = 0.0
             self.bev_edit_screen.bev_ibu = 0
@@ -1584,7 +1621,6 @@ class KegLevelApp(App):
         else:
             new_data = {
                 'id': new_id,
-                'bjcp': "", 
                 'description': ''
             }
         # --- DATA PRESERVATION END ---
@@ -1592,6 +1628,7 @@ class KegLevelApp(App):
         # Update with Form Data
         new_data.update({
             'name': scr.bev_name,
+            'bjcp': scr.bev_bjcp, # --- NEW: Save BJCP ---
             'abv': final_abv, # Saves as float or ""
             'ibu': final_ibu, # Saves as int or ""
             'srm': int(scr.bev_srm)
@@ -1725,6 +1762,16 @@ class KegLevelApp(App):
         self.sensor_logic.start_monitoring()
 
     def on_stop(self):
+        # --- NEW: Save Window Position ---
+        if hasattr(self, 'settings_manager'):
+            self.settings_manager.save_app_window_settings(
+                Window.left, 
+                Window.top, 
+                Window.width, 
+                Window.height
+            )
+        # ---------------------------------
+
         if hasattr(self, 'sensor_logic') and self.sensor_logic:
             self.sensor_logic.cleanup_gpio()
 

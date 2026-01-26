@@ -117,9 +117,36 @@ class SettingsManager:
             "workflow_window_geometry": None,
             "enable_pour_log": True,
             # --- NEW: Calibration Preference ---
-            "calibration_deduct_inventory": True
+            "calibration_deduct_inventory": True,
+            # --- NEW: App Window Persistence ---
+            "window_x": -1,
+            "window_y": -1,
+            "window_width": 800,
+            "window_height": 417
         }
-
+    
+    # --- NEW METHODS for App Window Persistence ---
+    def get_app_window_settings(self):
+        """Returns a dict with x, y, width, height."""
+        defaults = self._get_default_system_settings()
+        sys_set = self.settings.get('system_settings', {})
+        
+        return {
+            "x": sys_set.get("window_x", defaults["window_x"]),
+            "y": sys_set.get("window_y", defaults["window_y"]),
+            "width": sys_set.get("window_width", defaults["window_width"]),
+            "height": sys_set.get("window_height", defaults["window_height"])
+        }
+        
+    def save_app_window_settings(self, x, y, width, height):
+        sys_set = self.settings.get('system_settings', self._get_default_system_settings())
+        sys_set['window_x'] = int(x)
+        sys_set['window_y'] = int(y)
+        sys_set['window_width'] = int(width)
+        sys_set['window_height'] = int(height)
+        self.settings['system_settings'] = sys_set
+        self._save_all_settings()
+    
     # --- NEW METHODS for Calibration Preferences ---
     def get_calibration_deduct_inventory(self):
         return self.get_system_settings().get('calibration_deduct_inventory', True)

@@ -1427,12 +1427,13 @@
 <BeverageEditScreen>:
     BoxLayout:
         orientation: 'vertical'
-        HeaderLabel:
-            text: root.screen_title
+        # HeaderLabel removed to match Edit Keg screen
+        
         BoxLayout:
             orientation: 'vertical'
-            padding: 30
-            spacing: 15
+            # Padding and spacing kept from previous fix
+            padding: 15
+            spacing: 10
             
             # --- ROW 1: NAME ---
             BoxLayout:
@@ -1447,7 +1448,23 @@
                     size_hint_x: 0.65
                     on_text: root.bev_name = self.text
 
-            # --- ROW 2: ABV SLIDER ---
+            # --- ROW 2: BJCP STYLE ---
+            BoxLayout:
+                size_hint_y: None
+                height: 50
+                EditLabel:
+                    text: "BJCP Style:"
+                Spinner:
+                    text: root.bev_bjcp if root.bev_bjcp else "Select Style"
+                    values: root.bjcp_list
+                    size_hint_x: 0.65
+                    font_size: '18sp'
+                    background_normal: ''
+                    background_color: 0.25, 0.25, 0.25, 1
+                    option_cls: 'SpinnerOption'
+                    on_text: root.bev_bjcp = self.text
+
+            # --- ROW 3: ABV SLIDER ---
             BoxLayout:
                 size_hint_y: None
                 height: 50
@@ -1476,7 +1493,7 @@
                     text: "{:.1f} %".format(root.bev_abv)
                     size_hint_x: 0.15
 
-            # --- ROW 3: IBU SLIDER ---
+            # --- ROW 4: IBU SLIDER ---
             BoxLayout:
                 size_hint_y: None
                 height: 50
@@ -1505,7 +1522,7 @@
                     text: "{:.0f}".format(root.bev_ibu)
                     size_hint_x: 0.15
 
-            # --- ROW 4: COLOR (SRM) ---
+            # --- ROW 5: COLOR (SRM) ---
             BoxLayout:
                 size_hint_y: None
                 height: 60
@@ -1540,6 +1557,7 @@
                             width: 1
             Label: 
                 size_hint_y: 1 # Spacer
+
         BoxLayout:
             size_hint_y: None
             height: 70
