@@ -685,6 +685,18 @@ class KegEditScreen(Screen):
             "beverage_id": bev_id
         })
 
+        # --- FIX: SMART RESET LOGIC ---
+        # If the new Calculated Volume is LESS than what we supposedly dispensed,
+        # it means the math has drifted or the keg was refilled/reset.
+        # Auto-correct history to prevent negative volume display.
+        current_dispensed = keg_data.get('current_dispensed_liters', 0.0)
+        if calc_start_vol < current_dispensed:
+            print(f"KegEdit: correcting dispensed volume ({current_dispensed:.2f}L) > start volume ({calc_start_vol:.2f}L). Resetting history.")
+            keg_data['current_dispensed_liters'] = 0.0
+            keg_data['total_dispensed_pulses'] = 0
+            keg_data['fill_date'] = datetime.now().strftime("%Y-%m-%d")
+        # ------------------------------
+
         # 6. Save
         all_kegs = app.settings_manager.get_keg_definitions()
         if is_new:
