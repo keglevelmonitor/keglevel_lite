@@ -1,10 +1,26 @@
 ## 💻 KegLevel Lite Project
  
-**KegLevel Lite** app is a "stripped-down" version of the **KegLevel Monitor** app. It allows homebrewers to monitor and track the level of beer in their kegs. Up to 5 kegs are supported.
+The **KegLevel Lite** app is a "stripped-down" version of the **KegLevel Monitor** app. It allows homebrewers to monitor and track the level of beer in up to 5 kegs.
 
 Currently tested only on the Raspberry Pi 3B running Trixie and Bookworm. Should work with RPi4 and RPi5 running the same OS's but not yet tested.
 
-## To Install the KegLevel Lite App
+Please **donate $$** if you use the app. 
+
+![Support QR Code](src/assets/support.gif)
+
+## 💻 Suite of Apps for the Home Brewer
+**🔗 [KettleBrain Project](https://github.com/keglevelmonitor/kettlebrain)** An electric brewing kettle control system
+
+**🔗 [FermVault Project](https://github.com/keglevelmonitor/fermvault)** A fermentation chamber control system
+
+**🔗 [KegLevel Lite Project](https://github.com/keglevelmonitor/keglevel_lite)** A keg level monitoring system
+
+**🔗 [BatchFlow Project](https://github.com/keglevelmonitor/batchflow)** A homebrew batch management system
+
+**🔗 [TempMonitor Project](https://github.com/keglevelmonitor/tempmonitor)** A temperature monitoring and charting system
+
+
+## To Install the App
 
 Open **Terminal** and run this command. Type carefully and use proper uppercase / lowercase because it matters:
 
@@ -12,27 +28,25 @@ Open **Terminal** and run this command. Type carefully and use proper uppercase 
 bash <(curl -sL bit.ly/install-keglevel-lite)
 ```
 
-Please **donate $$** if you use the app. See "Support the app" under the Settings & Info menu.
+That's it! You will now find the app in your application menu under **Other**. You can use the "Check for Updates" function inside the app to install future updates.
 
+## 🔗 Detailed installation instructions
 
-Information on the full **KegLevel Monitor** app can be found here:
-**🔗 [KegLevel Monitor Project](https://github.com/keglevelmonitor/keglevelmonitor)** 
+👉 (placeholder for detailed installation instructions)
 
+## ⚙️ Summary hardware requirements
 
-There is also a **🔗 [Fermentation Vault Project](https://github.com/keglevelmonitor/fermvault)** project in the repository. The FermVault app monitors the temperature of a fermenting product (beer, wine, mead, etc.) inside a refrigerator or freezer. The app turns the refrigerator/freezer on or off, and optionally a heater on or off, to maintain a consistent fermentation temperature. The temperature of the fermenting product can be used as the control-to point. PID regulation ensures accurate temperature control with very little or no overshoot or undershoot of the setpoint temperature. Robust email notifications allow flexible remote monitoring and remote email control of the FermVault system. 
+Required
+* Raspberry Pi 3B (should work on RPi 4 but not yet tested)
+* Debian Trixie OS (not tested on any other OS)
 
+## ⚙️ Hardware Requirements
 
-## To uninstall the KegLevel Lite app
+For the complete list of required hardware, part numbers, and purchasing links, please see the detailed hardware list:
 
-Selections within the uninstall script allow you to:
-* uninstall only the app, leaving the settings folder intact (APP)
-    this is useful if you wish to reinstall the app but retain settings
-    (deletes ~/keglevel_lite contents and all of its subfolders)
-    (deletes the desktop shortcut from the Other launch menu)
-* uninstall the app and all of its settings (ALL)
-    (deletes everything above)
-    (deletes ~/keglevel_lite-data contents)
-* exit without doing anything
+➡️ **[View Detailed Hardware List](src/assets/hardware.md)**
+
+## To uninstall the App
 
 To uninstall, open **Terminal** and run this command. Type carefully and use proper uppercase / lowercase because it matters:
 
@@ -45,23 +59,17 @@ Installed file structure:
 
 ```
 ~/keglevel_lite/
-├── all of the app's management files...
-│
-├── src/
-│   ├── all of the app's source code...
-│   │
-│   └── assets/
-│        └── all of the app's asset files...
-│
-├── venv/
-│   └── virtual environment and dependencies...
-│            
+|-- utility files...
+|-- src/
+|   |-- application files...
+|   |-- assets/
+|       |-- supporting files...
+|-- venv/
+|   |-- python3 & dependencies
 ~/keglevel_lite-data/
-    └── all of the app settings json's...
+|-- user data...
     
-System-level dependencies installed via sudo apt outside of venv:
-sudo apt-get install -y python3-tk python3-dev swig python3-venv liblgpio-dev
-sudo to install all of the kivy dependencies, and there are a lot of them
+Required system-level dependencies are installed via sudo apt outside of venv.
 
 ```
 
