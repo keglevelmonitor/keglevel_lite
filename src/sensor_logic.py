@@ -59,7 +59,11 @@ class SensorLogic:
         self.keg_dispensed_liters = [0.0] * self.num_sensors 
         self.tap_is_active = [False] * self.num_sensors
         self.active_sensor_index = -1 
-        self.last_pulse_count = [0] * self.num_sensors
+        
+        # --- FIX: Sync with global hardware counts instead of resetting to 0 ---
+        # This prevents phantom pours when the settings are saved/reloaded.
+        self.last_pulse_count = list(global_pulse_counts[:self.num_sensors])
+        
         self.last_known_remaining_liters = [0.0] * self.num_sensors
         
         # Current/Last Pour State
