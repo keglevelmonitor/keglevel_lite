@@ -25,7 +25,7 @@ Please **donate $$** if you use the app.
 Open **Terminal** and run this command. Type carefully and use proper uppercase / lowercase because it matters:
 
 ```bash
-bash <(curl -sL bit.ly/install-keglevel-lite)
+bash <(curl -sL bit.ly/keglevel-lite)
 ```
 
 That's it! You will now find the app in your application menu under **Other**. You can use the "Check for Updates" function inside the app to install future updates.
