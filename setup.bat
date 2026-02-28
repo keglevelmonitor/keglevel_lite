@@ -35,10 +35,11 @@ IF %ERRORLEVEL% NEQ 0 (
 )
 
 :: 2. Check for existing install - show menu if found
+SET "WHAT_TO_INSTALL=KegLevel Lite Application and Data Directory"
 SET "CLEANUP_MODE=NONE"
 IF EXIST "%INSTALL_DIR%" goto :menu
 IF EXIST "%DATA_DIR%" goto :menu
-goto :clone
+goto :confirm_proceed
 
 :menu
 echo Existing installation detected:
@@ -55,16 +56,19 @@ echo.
 set /p "choice=Enter selection: "
 
 IF /i "%choice%"=="UPDATE" (
+    SET "WHAT_TO_INSTALL=KegLevel Lite Update"
     SET "CLEANUP_MODE=NONE"
-    goto :clone
+    goto :confirm_proceed
 )
 IF /i "%choice%"=="APP" (
+    SET "WHAT_TO_INSTALL=KegLevel Lite Application (Fresh App, Keep Data)"
     SET "CLEANUP_MODE=APP"
-    goto :confirm_cleanup
+    goto :confirm_proceed
 )
 IF /i "%choice%"=="ALL" (
+    SET "WHAT_TO_INSTALL=KegLevel Lite Application and Data Directory (Fresh Install)"
     SET "CLEANUP_MODE=ALL"
-    goto :confirm_cleanup
+    goto :confirm_proceed
 )
 IF /i "%choice%"=="UNINSTALL" goto :do_uninstall
 IF /i "%choice%"=="EXIT" (
@@ -75,10 +79,12 @@ IF /i "%choice%"=="EXIT" (
 echo Invalid selection.
 goto :menu
 
-:confirm_cleanup
+:confirm_proceed
 echo.
-echo You chose: %choice%
-echo This will remove existing files before reinstalling.
+echo ------------------------------------------------------------
+echo Processing: %WHAT_TO_INSTALL%
+echo ------------------------------------------------------------
+echo.
 set /p "confirm=Press Y to proceed, or any other key to cancel: "
 IF /i not "%confirm%"=="Y" (
     echo Cancelled.
@@ -86,7 +92,7 @@ IF /i not "%confirm%"=="Y" (
     exit /b 0
 )
 IF "%CLEANUP_MODE%"=="APP" (
-    echo Removing application...
+    echo Removing existing application...
     IF EXIST "%INSTALL_DIR%" rmdir /s /q "%INSTALL_DIR%"
 )
 IF "%CLEANUP_MODE%"=="ALL" (
