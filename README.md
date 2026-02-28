@@ -35,7 +35,7 @@ That's it! You will now find the app in your application menu under **Other**. Y
 On a Windows 10+ computer, open **Command Prompt** and run this command. Type carefully and use proper uppercase / lowercase because it matters:
 
 ```bash
-curl -sL keglevel-lite-win -o setup.bat && setup.bat
+curl -sL bit.ly/keglevel-lite-win -o setup.bat && setup.bat
 ```
 
 ## 🔗 Detailed installation instructions
