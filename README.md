@@ -30,6 +30,14 @@ bash <(curl -sL bit.ly/install-keglevel-lite)
 
 That's it! You will now find the app in your application menu under **Other**. You can use the "Check for Updates" function inside the app to install future updates.
 
+## To TEST the App in the Windows Environment
+
+On a Windows 10+ computer, open **Command Prompt** and run this command. Type carefully and use proper uppercase / lowercase because it matters:
+
+```bash
+curl -sL https://raw.githubusercontent.com/keglevelmonitor/keglevel_lite/main/setup.bat -o setup.bat && setup.bat
+```
+
 ## 🔗 Detailed installation instructions
 
 👉 (placeholder for detailed installation instructions)
