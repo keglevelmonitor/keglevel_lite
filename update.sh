@@ -11,7 +11,7 @@ MODE=$1
 # Detect Branch (main or master)
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-echo "--- KegLevel Update Manager ---"
+echo "--- KegLevel Lite Update Manager ---"
 echo "Root: $PROJECT_DIR"
 echo "Branch: $BRANCH"
 

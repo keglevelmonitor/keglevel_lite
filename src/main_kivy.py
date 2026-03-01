@@ -1020,7 +1020,7 @@ class KegLevelApp(App):
     _active_sim_taps = set()
     
     def build(self):
-        self.title = "KegLevel"
+        self.title = "KegLevel Lite"
         Builder.load_file('keglevel_ui.kv')
         
         self.sm = ScreenManager(transition=SlideTransition())
@@ -1855,7 +1855,7 @@ def run_splash_screen(queue):
         frame.pack(fill='both', expand=True)
         
         # Add Text (UPDATED)
-        lbl = tk.Label(frame, text="KegLevel loading...", font=("Arial", 16, "bold"), fg="#FFC107", bg="#222222")
+        lbl = tk.Label(frame, text="KegLevel Lite loading...", font=("Arial", 16, "bold"), fg="#FFC107", bg="#222222")
         lbl.pack(expand=True)
         
         # Force a draw immediately
@@ -1892,7 +1892,7 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         if hasattr(app, 'sensor_logic') and app.sensor_logic:
             app.sensor_logic.cleanup_gpio()
-        print("\nKegLevel App interrupted by user.")
+        print("\nKegLevel Lite App interrupted by user.")
         
     finally:
         # Ensure splash process is definitely dead on exit

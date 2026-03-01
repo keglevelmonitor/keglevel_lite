@@ -56,11 +56,7 @@ For the complete list of required hardware, part numbers, and purchasing links, 
 
 ## To uninstall the App
 
-To uninstall, run the same install command. When the menu appears, select **UNINSTALL**:
-
-```bash
-bash <(curl -sL bit.ly/install-keglevel-lite)
-```
+To uninstall, run the same command as installation. When the menu appears, type **UNINSTALL**.
 
 ## ⚙️ For reference
 Installed file structure:
