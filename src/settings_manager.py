@@ -725,7 +725,7 @@ class SettingsManager:
         notif_set.update(loaded_notif_settings) 
         settings['push_notification_settings'] = notif_set 
         if notif_set.get('notification_type') not in ["None", "Email", "Text", "Both"]: notif_set['notification_type'] = default_push_notification_settings_val['notification_type'] 
-        if notif_set.get('frequency') not in ["Hourly", "Daily", "Weekly", "Monthly"]: notif_set['frequency'] = default_push_notification_settings_val['frequency'] 
+        if notif_set.get('frequency') not in ["None", "Hourly", "Daily", "Weekly", "Monthly"]: notif_set['frequency'] = default_push_notification_settings_val['frequency'] 
         
         port_val = notif_set.get('smtp_port', default_push_notification_settings_val['smtp_port'])
         notif_set.setdefault('smtp_server', default_push_notification_settings_val['smtp_server'])
@@ -1079,7 +1079,7 @@ class SettingsManager:
         for key in defaults.keys(): 
             if key not in new_notif_settings: new_notif_settings[key] = defaults[key] 
         if new_notif_settings.get('notification_type') not in ["None", "Email", "Text", "Both"]: new_notif_settings['notification_type'] = defaults['notification_type'] 
-        if new_notif_settings.get('frequency') not in ["Hourly", "Daily", "Weekly", "Monthly"]: new_notif_settings['frequency'] = defaults['frequency'] 
+        if new_notif_settings.get('frequency') not in ["None", "Hourly", "Daily", "Weekly", "Monthly"]: new_notif_settings['frequency'] = defaults['frequency'] 
         
         port_val = new_notif_settings.get('smtp_port', defaults['smtp_port'])
         try:
