@@ -1389,48 +1389,50 @@
             BoxLayout:
                 size_hint_y: None
                 height: 60
-                padding: (0, 10, 0, 0)
-                Label:
-                    text: "Volume at Fill:\n[size=14sp][color=#888888](calc @ 1.014 SG)[/color][/size]"
-                    markup: True
-                    font_size: '20sp'
-                    bold: True
-                    halign: 'right'
-                    valign: 'middle'
-                    text_size: self.size
-                    size_hint_x: 0.6
-                Label:
-                    text: root.ui_calculated_text
-                    font_size: '28sp'
-                    bold: True
-                    color: 0, 1, 0, 1
-                    halign: 'left'
-                    valign: 'middle'
-                    text_size: self.size
-                    size_hint_x: 0.4
-                    padding: (20, 0)
-            BoxLayout:
-                size_hint_y: None
-                height: 60
-                padding: (0, 0, 0, 0)
-                Label:
-                    text: "Current Remaining:"
-                    font_size: '20sp'
-                    bold: True
-                    halign: 'right'
-                    valign: 'middle'
-                    text_size: self.size
-                    size_hint_x: 0.6
-                Label:
-                    text: root.ui_remaining_text
-                    font_size: '28sp'
-                    bold: True
-                    color: 1, 0.78, 0, 1
-                    halign: 'left'
-                    valign: 'middle'
-                    text_size: self.size
-                    size_hint_x: 0.4
-                    padding: (20, 0)
+                padding: (0, 5, 0, 0)
+                # Left half: Volume at Fill
+                BoxLayout:
+                    size_hint_x: 0.5
+                    Label:
+                        text: "Volume at Fill:\n[size=13sp][color=#888888](calc @ 1.014 SG)[/color][/size]"
+                        markup: True
+                        font_size: '18sp'
+                        bold: True
+                        halign: 'right'
+                        valign: 'middle'
+                        text_size: self.size
+                        size_hint_x: 0.58
+                    Label:
+                        text: root.ui_calculated_text
+                        font_size: '26sp'
+                        bold: True
+                        color: 0, 1, 0, 1
+                        halign: 'left'
+                        valign: 'middle'
+                        text_size: self.size
+                        size_hint_x: 0.42
+                        padding: (10, 0)
+                # Right half: Current Remaining
+                BoxLayout:
+                    size_hint_x: 0.5
+                    Label:
+                        text: "Current Remaining:"
+                        font_size: '18sp'
+                        bold: True
+                        halign: 'right'
+                        valign: 'middle'
+                        text_size: self.size
+                        size_hint_x: 0.58
+                    Label:
+                        text: root.ui_remaining_text
+                        font_size: '26sp'
+                        bold: True
+                        color: 1, 0.78, 0, 1
+                        halign: 'left'
+                        valign: 'middle'
+                        text_size: self.size
+                        size_hint_x: 0.42
+                        padding: (10, 0)
         BoxLayout:
             size_hint_y: None
             height: 70
