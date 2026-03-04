@@ -148,7 +148,6 @@ class SettingsConfigTab(BoxLayout):
         except ValueError: pass
         app.is_settings_dirty = False
         app.apply_config_changes()
-        app.navigate_to('dashboard')
 
     def request_monitor_import(self):
         """Triggers the backend migration tool and reports results."""
@@ -1077,11 +1076,9 @@ class SettingsAlertsTab(BoxLayout):
             Clock.schedule_once(lambda dt: app.notification_manager.force_reschedule(), 0.1)
 
     def save_all_settings(self):
-        """Save and return to the dashboard."""
+        """Save settings and remain on the tab."""
         self._save_to_backend()
-        app = App.get_running_app()
-        app.is_settings_dirty = False
-        app.navigate_to("dashboard")
+        App.get_running_app().is_settings_dirty = False
 
     def test_send(self):
         """Save current UI values then fire an immediate test email."""
@@ -1187,9 +1184,7 @@ class KegLevelApp(App):
             settings_screen = self.root.get_screen('settings')
             current_tab = settings_screen.ids.settings_manager.current
             if current_tab == 'tab_conf':
-                # save_config() handles dirty-clear and navigation itself
                 settings_screen.ids.tab_conf_content.save_config()
-                return
             elif current_tab == 'tab_alerts':
                 settings_screen.ids.tab_alerts_content._save_to_backend()
         except Exception as e:
