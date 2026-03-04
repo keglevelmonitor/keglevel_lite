@@ -60,6 +60,7 @@ from kivy.metrics import Metrics
 from settings_manager import SettingsManager, UNASSIGNED_KEG_ID, UNASSIGNED_BEVERAGE_ID
 from sensor_logic import SensorLogic, FLOW_SENSOR_PINS
 from notification_manager import NotificationManager
+from version import APP_VERSION
 
 # Special flag for the "Keg Kicked" action
 KEG_KICKED_ID = "keg_kicked_action"
@@ -1175,6 +1176,7 @@ class KegLevelApp(App):
     _active_sim_taps  = set()
     is_settings_dirty = BooleanProperty(False)
     _suppress_dirty   = False
+    version           = StringProperty(APP_VERSION)
 
     # ------------------------------------------------------------------
     # Dirty-settings helpers
