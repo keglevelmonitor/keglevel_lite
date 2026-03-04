@@ -54,6 +54,7 @@ from kivy.uix.behaviors import ButtonBehavior
 from kivy.properties import StringProperty, NumericProperty, ObjectProperty, ListProperty, BooleanProperty
 from kivy.utils import get_color_from_hex
 from kivy.core.window import Window
+from kivy.metrics import Metrics
 
 # --- 2. IMPORT BACKEND LOGIC ---
 from settings_manager import SettingsManager, UNASSIGNED_KEG_ID, UNASSIGNED_BEVERAGE_ID
@@ -2020,19 +2021,21 @@ class KegLevelApp(App):
         self.sensor_logic.start_monitoring()
 
     def on_stop(self):
-        # --- NEW: Save Window Position ---
         if hasattr(self, 'settings_manager'):
-            # Enforce strict minimums before saving to disk
-            safe_width = max(Window.width, 800)
-            safe_height = max(Window.height, 418)
-            
+            # Window.width/height are physical pixels on DPI-scaled displays (e.g. 125%).
+            # Dividing by Metrics.density converts back to logical pixels before saving,
+            # which prevents the window from growing larger on every close/reopen cycle.
+            # On Linux/Pi, Metrics.density = 1.0 so this is a no-op there.
+            dpi = Metrics.density if Metrics.density > 0 else 1.0
+            safe_width  = max(int(round(Window.width  / dpi)), 800)
+            safe_height = max(int(round(Window.height / dpi)), 418)
+
             self.settings_manager.save_app_window_settings(
-                Window.left, 
-                Window.top, 
-                safe_width, 
+                Window.left,
+                Window.top,
+                safe_width,
                 safe_height
             )
-        # ---------------------------------
 
         if hasattr(self, 'notification_manager') and self.notification_manager:
             self.notification_manager.stop_scheduler()
