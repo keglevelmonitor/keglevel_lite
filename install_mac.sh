@@ -124,6 +124,8 @@ echo "--- [Step 5/5] Creating App Launcher ---"
 
 # Create ~/Applications if it does not exist (standard macOS per-user location)
 mkdir -p "$LAUNCHER_MACOS"
+LAUNCHER_RESOURCES="$LAUNCHER_APP/Contents/Resources"
+mkdir -p "$LAUNCHER_RESOURCES"
 
 # Write the executable shell script inside the bundle
 cat > "$LAUNCHER_EXEC" << APPSCRIPT
@@ -134,7 +136,37 @@ APPSCRIPT
 
 chmod +x "$LAUNCHER_EXEC"
 
-# Write the Info.plist
+# Add app icon from beer-keg.png (convert to .icns for macOS)
+ICON_SOURCE="$PROJECT_DIR/src/assets/beer-keg.png"
+ICON_ICNS="$LAUNCHER_RESOURCES/beer-keg.icns"
+if [ -f "$ICON_SOURCE" ]; then
+    echo "Adding app icon..."
+    ICONSET_DIR=$(mktemp -d)
+    for size in 16 32 64 128 256 512; do
+        sips -z $size $size "$ICON_SOURCE" --out "$ICONSET_DIR/icon_${size}x${size}.png" 2>/dev/null
+        size2=$((size * 2))
+        sips -z $size2 $size2 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_${size}x${size}@2x.png" 2>/dev/null
+    done
+    if iconutil -c icns "$ICONSET_DIR" -o "$ICON_ICNS" 2>/dev/null; then
+        rm -rf "$ICONSET_DIR"
+        echo "Icon installed."
+    else
+        rm -rf "$ICONSET_DIR"
+        echo "[WARNING] Could not create .icns; app will use default icon."
+    fi
+else
+    echo "[WARNING] beer-keg.png not found at $ICON_SOURCE"
+fi
+
+# Write the Info.plist (include icon if we created it)
+if [ -f "$ICON_ICNS" ]; then
+    ICON_PLIST='    <key>CFBundleIconFile</key>
+    <string>beer-keg</string>
+'
+else
+    ICON_PLIST=""
+fi
+
 cat > "$LAUNCHER_APP/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -152,7 +184,7 @@ cat > "$LAUNCHER_APP/Contents/Info.plist" << PLIST
     <string>APPL</string>
     <key>CFBundleExecutable</key>
     <string>KegLevel Lite</string>
-    <key>LSUIElement</key>
+${ICON_PLIST}    <key>LSUIElement</key>
     <false/>
 </dict>
 </plist>
@@ -166,7 +198,8 @@ echo ""
 echo "Installation complete!"
 echo ""
 echo "To launch KegLevel Lite:"
-echo "   Open Finder → Go → Home → Applications"
+echo "   Finder → Go → Home (Cmd+Shift+H) → open the Applications folder"
+echo "   (This is your home Applications folder, not the main /Applications)"
 echo "   Double-click 'KegLevel Lite'"
 echo ""
 echo "Or run from Terminal:"

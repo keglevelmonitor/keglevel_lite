@@ -46,6 +46,8 @@ On a macOS computer, open **Terminal** and run this command. Type carefully and 
 bash <(curl -sL bit.ly/keglevel-lite-mac)
 ```
 
+Note that you may need to install developer tools (free) to complete the installation. Just follow the prompts to install the developer tools, then run the bash command again to install the app on the Mac. (Beware it can take 5-10 minutes to install the develper tools on the Mac.)
+
 You will find the app launcher in **Finder → Home → Applications → KegLevel Lite**.
 
 ## 🔗 Detailed installation instructions
