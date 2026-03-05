@@ -2118,26 +2118,28 @@ def run_splash_screen(queue):
 
 if __name__ == '__main__':
     import multiprocessing
-    
-    # 1. Start the Splash Screen immediately in a separate process
-    # We use multiprocessing so it doesn't block the main thread imports
-    splash_queue = multiprocessing.Queue()
-    splash_process = multiprocessing.Process(target=run_splash_screen, args=(splash_queue,))
-    splash_process.start()
-    
+
+    # Splash screen is only used on Raspberry Pi (Linux).
+    # On Windows the main UI loads before the splash anyway (not needed).
+    # On macOS spawning a Tkinter subprocess is blocked by the OS (causes a crash).
+    USE_SPLASH = sys.platform == "linux"
+
+    if USE_SPLASH:
+        splash_queue = multiprocessing.Queue()
+        splash_process = multiprocessing.Process(target=run_splash_screen, args=(splash_queue,))
+        splash_process.start()
+
     try:
-        # 2. Initialize and Run the App
         app = KegLevelApp()
-        # Pass the queue so the App can kill the splash when ready
-        app.splash_queue = splash_queue 
+        if USE_SPLASH:
+            app.splash_queue = splash_queue
         app.run()
-        
+
     except KeyboardInterrupt:
         if hasattr(app, 'sensor_logic') and app.sensor_logic:
             app.sensor_logic.cleanup_gpio()
         print("\nKegLevel Lite App interrupted by user.")
-        
+
     finally:
-        # Ensure splash process is definitely dead on exit
-        if splash_process.is_alive():
+        if USE_SPLASH and splash_process.is_alive():
             splash_process.terminate()
