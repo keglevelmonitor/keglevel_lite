@@ -57,10 +57,11 @@ class PicoSensorLogic:
         self._pico_temperature = None
 
         # Calibration state
-        self._auto_cal_mode          = False
-        self._auto_cal_locked_tap    = -1
+        self._auto_cal_mode           = False
+        self._auto_cal_locked_tap     = -1
         self._auto_cal_session_pulses = 0
-        self._cal_started_on_pico    = False
+        self._cal_started_on_pico     = False
+        self._is_calibrating          = False   # compatibility stub checked by screen on_leave
 
         # Threading
         self._running      = False
