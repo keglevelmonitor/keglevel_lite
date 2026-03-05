@@ -83,7 +83,7 @@ fi
 LAUNCHER_APP="$HOME/Applications/KegLevel Lite.app"
 LAUNCHER_EXEC="$LAUNCHER_APP/Contents/MacOS/KegLevel Lite"
 LAUNCHER_RESOURCES="$LAUNCHER_APP/Contents/Resources"
-ICON_SOURCE="$PROJECT_DIR/src/assets/beer-keg.png"
+ICON_SOURCE="$PROJECT_DIR/src/assets/beer-keg.icns"
 ICON_ICNS="$LAUNCHER_RESOURCES/beer-keg.icns"
 
 if [ -f "$LAUNCHER_EXEC" ]; then
@@ -94,23 +94,13 @@ if [ -f "$LAUNCHER_EXEC" ]; then
 APPSCRIPT
     chmod +x "$LAUNCHER_EXEC"
 
-    # Refresh app icon
+    # Refresh app icon (copy pre-built .icns from repo)
     if [ -f "$ICON_SOURCE" ]; then
         mkdir -p "$LAUNCHER_RESOURCES"
-        ICONSET_DIR=$(mktemp -d)
-        for size in 16 32 64 128 256 512; do
-            sips -z $size $size "$ICON_SOURCE" --out "$ICONSET_DIR/icon_${size}x${size}.png" 2>/dev/null
-            size2=$((size * 2))
-            sips -z $size2 $size2 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_${size}x${size}@2x.png" 2>/dev/null
-        done
-        if iconutil -c icns "$ICONSET_DIR" -o "$ICON_ICNS" 2>/dev/null; then
-            rm -rf "$ICONSET_DIR"
-            /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string beer-keg" "$LAUNCHER_APP/Contents/Info.plist" 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile beer-keg" "$LAUNCHER_APP/Contents/Info.plist" 2>/dev/null
-            echo "App icon refreshed."
-        else
-            rm -rf "$ICONSET_DIR"
-        fi
+        cp "$ICON_SOURCE" "$ICON_ICNS"
+        /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string beer-keg" "$LAUNCHER_APP/Contents/Info.plist" 2>/dev/null || \
+        /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile beer-keg" "$LAUNCHER_APP/Contents/Info.plist" 2>/dev/null
+        echo "App icon refreshed."
     fi
     echo "Launcher updated."
 fi

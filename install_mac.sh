@@ -136,29 +136,17 @@ APPSCRIPT
 
 chmod +x "$LAUNCHER_EXEC"
 
-# Add app icon from beer-keg.png (convert to .icns for macOS)
-ICON_SOURCE="$PROJECT_DIR/src/assets/beer-keg.png"
+# Copy app icon from repo (beer-keg.icns is pre-built and stored in src/assets/)
+ICON_SOURCE="$PROJECT_DIR/src/assets/beer-keg.icns"
 ICON_ICNS="$LAUNCHER_RESOURCES/beer-keg.icns"
 if [ -f "$ICON_SOURCE" ]; then
-    echo "Adding app icon..."
-    ICONSET_DIR=$(mktemp -d)
-    for size in 16 32 64 128 256 512; do
-        sips -z $size $size "$ICON_SOURCE" --out "$ICONSET_DIR/icon_${size}x${size}.png" 2>/dev/null
-        size2=$((size * 2))
-        sips -z $size2 $size2 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_${size}x${size}@2x.png" 2>/dev/null
-    done
-    if iconutil -c icns "$ICONSET_DIR" -o "$ICON_ICNS" 2>/dev/null; then
-        rm -rf "$ICONSET_DIR"
-        echo "Icon installed."
-    else
-        rm -rf "$ICONSET_DIR"
-        echo "[WARNING] Could not create .icns; app will use default icon."
-    fi
+    cp "$ICON_SOURCE" "$ICON_ICNS"
+    echo "Icon installed."
 else
-    echo "[WARNING] beer-keg.png not found at $ICON_SOURCE"
+    echo "[WARNING] beer-keg.icns not found at $ICON_SOURCE - app will use default icon."
 fi
 
-# Write the Info.plist (include icon if we created it)
+# Write the Info.plist (include icon if it was copied successfully)
 if [ -f "$ICON_ICNS" ]; then
     ICON_PLIST='    <key>CFBundleIconFile</key>
     <string>beer-keg</string>
