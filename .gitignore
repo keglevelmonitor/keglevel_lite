@@ -35,6 +35,9 @@ keglevel_lite-data/
 # Your private build utility script
 build.sh
 
+# Temporary build artifacts from build_installer_mac.sh
+mac_build/
+
 # Operating system junk files
 .DS_Store
 Thumbs.db
