@@ -24,9 +24,6 @@ REQUEST_TIMEOUT_S    = 2.0   # Pico can take up to ~1s during flash writes / GC
 POLL_INTERVAL_S      = 0.5   # normal idle poll rate
 POUR_POLL_INTERVAL_S = 0.1   # fast poll rate while any tap is actively pouring
 OFFLINE_RETRY_S      = 5.0   # sleep between polls once truly offline
-# Consecutive "not pouring" polls needed before the app declares a pour ended.
-# At 0.1 s/poll this is ~1.5 s of confirmed silence — filters Pico gray-zone glitches.
-POUR_END_THRESHOLD   = 15
 DISCOVERY_PORT     = 5005
 DISCOVERY_DEVICE   = "keglevel-pico"
 
@@ -67,10 +64,6 @@ class PicoSensorLogic:
 
         # Temperature dict from last /api/state poll
         self._pico_temperature = None
-
-        # Pour-end debounce counters — must reach POUR_END_THRESHOLD before
-        # the app declares a pour finished (filters Pico gray-zone false endings)
-        self._pour_end_count = [0] * self.num_sensors
 
         # Calibration state
         self._auto_cal_mode           = False
@@ -318,40 +311,23 @@ class PicoSensorLogic:
                     self.current_pour_volume[i]         += delta
 
                 if pouring:
-                    # Confirmed pouring — reset debounce counter and show status
-                    self._pour_end_count[i] = 0
-                    self.tap_is_active[i]   = True
+                    self.tap_is_active[i] = True
                     self._update_ui(i, flow_rate,
                                     self.last_known_remaining_liters[i],
                                     "Pouring",
                                     self.current_pour_volume[i])
                 elif self.tap_is_active[i]:
-                    # Pico says not pouring — but wait for POUR_END_THRESHOLD
-                    # consecutive confirmations before declaring the pour finished.
-                    # This filters gray-zone glitches where the Pico's 0.5 s pulse
-                    # window briefly shows too-few pulses during an active pour.
-                    self._pour_end_count[i] += 1
-                    if self._pour_end_count[i] < POUR_END_THRESHOLD:
-                        # Still within debounce window — keep showing Pouring
-                        self._update_ui(i, 0.0,
-                                        self.last_known_remaining_liters[i],
-                                        "Pouring",
-                                        self.current_pour_volume[i])
-                    else:
-                        # Sustained not-pouring — officially end the pour
-                        self._pour_end_count[i] = 0
-                        self.tap_is_active[i]    = False
-                        self.last_pour_volumes[i] = self.current_pour_volume[i]
-                        self.current_pour_volume[i] = 0.0
-                        self.settings_manager.save_last_pour_volumes(self.last_pour_volumes)
-                        self.settings_manager.save_all_keg_dispensed_volumes()
-                        self._update_ui(i, 0.0,
-                                        self.last_known_remaining_liters[i],
-                                        "Idle",
-                                        self.last_pour_volumes[i])
-                        self._save_pico_baselines()
+                    # Pour just stopped
+                    self.tap_is_active[i]     = False
+                    self.last_pour_volumes[i]  = self.current_pour_volume[i]
+                    self.current_pour_volume[i] = 0.0
+                    self.settings_manager.save_last_pour_volumes(self.last_pour_volumes)
+                    self.settings_manager.save_all_keg_dispensed_volumes()
+                    self._update_ui(i, 0.0,
+                                    self.last_known_remaining_liters[i],
+                                    "Idle",
+                                    self.last_pour_volumes[i])
                 else:
-                    self._pour_end_count[i] = 0
                     self._update_ui(i, 0.0,
                                     self.last_known_remaining_liters[i],
                                     "Idle",
