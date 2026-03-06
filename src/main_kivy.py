@@ -1052,16 +1052,23 @@ class SettingsAlertsTab(BoxLayout):
             lbl.text = "OFF" if value <= self.VOLUME_OFF else f"{value:.2f} L"
         App.get_running_app().mark_settings_dirty()
 
+    def _fmt_temp(self, temp_f):
+        """Format a °F value using the user's display unit preference."""
+        app = App.get_running_app()
+        if app.settings_manager.get_display_units() == 'metric':
+            return f"{(temp_f - 32) * 5 / 9:.1f}°C"
+        return f"{int(temp_f)}°F"
+
     def on_low_temp_slider(self, value):
         lbl = self.ids.get("lbl_low_temp")
         if lbl:
-            lbl.text = "OFF" if value <= self.LOW_TEMP_OFF else f"{int(value)}°F"
+            lbl.text = "OFF" if value <= self.LOW_TEMP_OFF else self._fmt_temp(value)
         App.get_running_app().mark_settings_dirty()
 
     def on_high_temp_slider(self, value):
         lbl = self.ids.get("lbl_high_temp")
         if lbl:
-            lbl.text = "OFF" if value >= self.HIGH_TEMP_OFF else f"{int(value)}°F"
+            lbl.text = "OFF" if value >= self.HIGH_TEMP_OFF else self._fmt_temp(value)
         App.get_running_app().mark_settings_dirty()
 
     # --- Save / Test ---
