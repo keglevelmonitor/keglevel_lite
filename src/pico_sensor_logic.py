@@ -456,37 +456,39 @@ def get_local_subnet_prefix():
         return None
 
 
-def scan_for_pico(subnet_prefix, timeout=0.4):
+def scan_for_pico(subnet_prefix, timeout=0.5):
     """
-    Probe every host in <subnet_prefix>.1 – .254 in parallel.
-    Returns the IP string of the first host that responds to /api/version
-    with a JSON payload containing a 'version' key, or None if not found.
+    Probe every host in <subnet_prefix>.1 – .254 for the Pico's /api/version
+    endpoint.  Returns the first IP that responds with a 'version' key, or None.
 
-    timeout: per-host connection timeout in seconds.
-             With 254 concurrent threads this typically resolves in < 500 ms.
+    Concurrency is capped at MAX_CONCURRENT to avoid flooding the network stack
+    and starving the sensor polling thread.
     """
     if _urllib_request is None:
         return None
 
-    found = [None]          # list so the closure can mutate it
+    MAX_CONCURRENT = 25
+    found = [None]
     lock  = threading.Lock()
+    sem   = threading.Semaphore(MAX_CONCURRENT)
 
     def _probe(ip):
-        if found[0]:          # already found by another thread
-            return
-        try:
-            req = _urllib_request.Request(
-                f"http://{ip}/api/version",
-                headers={"Accept": "application/json"}
-            )
-            with _urllib_request.urlopen(req, timeout=timeout) as resp:
-                data = json.loads(resp.read().decode())
-                if "version" in data:
-                    with lock:
-                        if not found[0]:
-                            found[0] = ip
-        except Exception:
-            pass
+        with sem:
+            if found[0]:        # stop as soon as another thread succeeds
+                return
+            try:
+                req = _urllib_request.Request(
+                    f"http://{ip}/api/version",
+                    headers={"Accept": "application/json"}
+                )
+                with _urllib_request.urlopen(req, timeout=timeout) as resp:
+                    data = json.loads(resp.read().decode())
+                    if "version" in data:
+                        with lock:
+                            if not found[0]:
+                                found[0] = ip
+            except Exception:
+                pass
 
     threads = [
         threading.Thread(target=_probe, args=(f"{subnet_prefix}.{i}",), daemon=True)
@@ -494,8 +496,13 @@ def scan_for_pico(subnet_prefix, timeout=0.4):
     ]
     for t in threads:
         t.start()
-    # Wait just long enough for any thread to return
+
+    # Join with a per-thread timeout; break early once the Pico is found
+    deadline = time.time() + timeout + 2.0
     for t in threads:
-        t.join(timeout=timeout + 0.25)
+        remaining = deadline - time.time()
+        if remaining <= 0 or found[0]:
+            break
+        t.join(timeout=remaining)
 
     return found[0]
