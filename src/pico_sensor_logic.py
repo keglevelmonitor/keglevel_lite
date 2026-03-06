@@ -20,9 +20,9 @@ except ImportError:
     _urllib_error   = None
 
 DEFAULT_PICO_HOST  = "keglevel-pico.local"
-REQUEST_TIMEOUT_S  = 1.0   # local network — Pico should respond in <200 ms
+REQUEST_TIMEOUT_S  = 2.0   # Pico can take up to ~1s during flash writes / GC
 POLL_INTERVAL_S    = 0.5
-OFFLINE_RETRY_S    = 3.0   # used only after many consecutive failures
+OFFLINE_RETRY_S    = 5.0   # sleep between polls once truly offline
 DISCOVERY_PORT     = 5005
 DISCOVERY_DEVICE   = "keglevel-pico"
 
@@ -202,6 +202,11 @@ class PicoSensorLogic:
     # Main polling loop
     # ------------------------------------------------------------------
 
+    # Number of consecutive failures before the UI is told the Pico is offline.
+    # Each failure already costs REQUEST_TIMEOUT_S (2s) + POLL_INTERVAL_S (0.5s),
+    # so 3 failures = ~7.5 s of confirmed silence before we show "Offline".
+    _OFFLINE_THRESHOLD = 3
+
     def _sensor_loop(self):
         _consecutive_failures = 0
 
@@ -219,20 +224,22 @@ class PicoSensorLogic:
 
             if state is None:
                 _consecutive_failures += 1
-                if self._pico_online:
-                    self._pico_online = False
-                    print(f"[PicoSensor] Pico not responding (failure #{_consecutive_failures}) — retrying...")
-                for i in range(self.num_sensors):
-                    self._update_ui(i, 0.0,
-                                    self.last_known_remaining_liters[i],
-                                    "Offline",
-                                    self.last_pour_volumes[i])
-                # Transient blip: retry at normal rate for first 3 failures.
-                # Only back off after sustained outage.
-                if _consecutive_failures <= 3:
-                    time.sleep(POLL_INTERVAL_S)
-                else:
+                print(f"[PicoSensor] Poll failed (#{_consecutive_failures})")
+
+                if _consecutive_failures >= self._OFFLINE_THRESHOLD:
+                    # Sustained outage — tell the UI and slow down polling
+                    if self._pico_online:
+                        self._pico_online = False
+                        print("[PicoSensor] Pico offline — slowing retry rate")
+                    for i in range(self.num_sensors):
+                        self._update_ui(i, 0.0,
+                                        self.last_known_remaining_liters[i],
+                                        "Offline",
+                                        self.last_pour_volumes[i])
                     time.sleep(OFFLINE_RETRY_S)
+                else:
+                    # Transient blip — stay silent, retry at the normal rate
+                    time.sleep(POLL_INTERVAL_S)
                 continue
 
             _consecutive_failures = 0
