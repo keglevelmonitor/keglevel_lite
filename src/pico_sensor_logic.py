@@ -22,7 +22,7 @@ except ImportError:
 DEFAULT_PICO_HOST  = "keglevel-pico.local"
 REQUEST_TIMEOUT_S  = 2.0
 POLL_INTERVAL_S    = 0.5
-OFFLINE_RETRY_S    = 5.0
+OFFLINE_RETRY_S    = 1.5
 DISCOVERY_PORT     = 5005
 DISCOVERY_DEVICE   = "keglevel-pico"
 

@@ -171,21 +171,53 @@ class SettingsConfigTab(BoxLayout):
         app.apply_config_changes()
 
     def find_pico(self):
-        """Scan the local subnet for the Pico W and fill the host field."""
+        """Verify a known Pico IP, or scan the subnet if none is configured."""
         if not _PICO_BACKEND_AVAILABLE:
             return
         btn = self.ids.btn_find_pico
         btn.disabled = True
-        btn.text = "Scanning..."
 
-        def _scan():
+        known_host = self.ids.txt_pico_host.text.strip()
+
+        def _verify_or_scan():
             from pico_sensor_logic import scan_for_pico, get_local_subnet_prefix
-            prefix = get_local_subnet_prefix()
-            ip = scan_for_pico(prefix) if prefix else None
+            import json
+            ip = None
+            if known_host:
+                # Fast path: just confirm the already-configured IP responds
+                try:
+                    import urllib.request as _ur
+                    req = _ur.Request(
+                        f"http://{known_host}/api/version",
+                        headers={"Accept": "application/json"}
+                    )
+                    with _ur.urlopen(req, timeout=2.0) as resp:
+                        data = json.loads(resp.read().decode())
+                        if "version" in data:
+                            ip = known_host
+                except Exception:
+                    pass
+                if ip is None:
+                    # Known host didn't respond — fall back to full scan
+                    from kivy.clock import Clock
+                    Clock.schedule_once(lambda dt: setattr(btn, 'text', 'Scanning...'))
+                    prefix = get_local_subnet_prefix()
+                    ip = scan_for_pico(prefix) if prefix else None
+                else:
+                    from kivy.clock import Clock
+                    Clock.schedule_once(lambda dt: setattr(btn, 'text', 'Verifying...'))
+            else:
+                # No host configured — do a full subnet scan
+                from kivy.clock import Clock
+                Clock.schedule_once(lambda dt: setattr(btn, 'text', 'Scanning...'))
+                prefix = get_local_subnet_prefix()
+                ip = scan_for_pico(prefix) if prefix else None
+
             from kivy.clock import Clock
             Clock.schedule_once(lambda dt: self._on_find_pico_result(ip))
 
-        threading.Thread(target=_scan, daemon=True).start()
+        btn.text = "Verifying..." if known_host else "Scanning..."
+        threading.Thread(target=_verify_or_scan, daemon=True).start()
 
     def _on_find_pico_result(self, ip):
         btn = self.ids.btn_find_pico
