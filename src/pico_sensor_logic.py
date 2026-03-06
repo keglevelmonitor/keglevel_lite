@@ -152,32 +152,45 @@ class PicoSensorLogic:
         Listen for UDP broadcast packets from the Pico.
         When found, update self.host and self.base_url so the sensor loop
         connects on its next retry cycle.
+        Retries the socket bind every 5 seconds so a Windows Firewall
+        prompt that initially blocks the port is handled gracefully.
         """
         import socket as _socket
-        sock = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-        sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
-        try:
-            sock.bind(("", DISCOVERY_PORT))
-        except Exception as e:
-            print(f"[PicoSensor] Discovery bind error: {e}")
-            return
-        sock.settimeout(2.0)
-        while self._running:
-            # Once the Pico is found, listener is no longer needed
-            if self._pico_online:
-                break
+
+        while self._running and not self._pico_online:
+            sock = None
             try:
-                data, addr = sock.recvfrom(256)
-                payload = json.loads(data.decode())
-                if payload.get("device") == DISCOVERY_DEVICE:
-                    ip = payload.get("ip") or addr[0]
-                    if ip and ip != self.host:
-                        print(f"[PicoSensor] Discovery: Pico found at {ip}")
-                        self.host     = ip
-                        self.base_url = f"http://{ip}"
-            except Exception:
-                pass
-        sock.close()
+                sock = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+                sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+                sock.bind(("0.0.0.0", DISCOVERY_PORT))
+                sock.settimeout(2.0)
+                print(f"[PicoSensor] Discovery: listening on UDP port {DISCOVERY_PORT}...")
+
+                while self._running and not self._pico_online:
+                    try:
+                        data, addr = sock.recvfrom(256)
+                        payload = json.loads(data.decode())
+                        if payload.get("device") == DISCOVERY_DEVICE:
+                            ip = payload.get("ip") or addr[0]
+                            if ip and ip != self.host:
+                                print(f"[PicoSensor] Discovery: Pico found at {ip}")
+                                self.host     = ip
+                                self.base_url = f"http://{ip}"
+                    except _socket.timeout:
+                        pass
+                    except Exception:
+                        pass
+
+            except Exception as e:
+                print(f"[PicoSensor] Discovery bind failed ({e}) — retrying in 5 s...")
+                time.sleep(5.0)
+            finally:
+                if sock:
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
+
         print("[PicoSensor] Discovery listener stopped.")
 
     def stop_monitoring(self):
