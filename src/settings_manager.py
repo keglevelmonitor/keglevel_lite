@@ -1061,8 +1061,8 @@ class SettingsManager:
         return max(1, min(displayed_taps, self.num_sensors))
 
     def get_sensor_backend(self):
-        """Return 'gpio' or 'pico_w'."""
-        return self.settings.get('system_settings', {}).get('sensor_backend', 'gpio')
+        """KegLevel Lite always uses the GPIO backend."""
+        return 'gpio'
 
     def get_pico_w_host(self):
         """Return the user-overridden Pico W hostname/IP, or '' to use mDNS default."""
